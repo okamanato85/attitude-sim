@@ -1,0 +1,2140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>立方体群ロボット探査シミュレータ</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0f; color: #e0e0e0; font-family: 'Helvetica Neue', sans-serif; overflow: hidden; }
+    #canvas-container { width: 100vw; height: 100vh; }
+    #ui {
+      position: fixed; top: 20px; left: 20px; z-index: 10;
+      background: rgba(10,10,20,0.88); border: 1px solid #1e3a5f;
+      border-radius: 8px; padding: 16px 20px; min-width: 230px;
+    }
+    #ui h1 { font-size: 12px; font-weight: 600; color: #60a0ff; letter-spacing: 0.08em; margin-bottom: 14px; }
+    .ctrl { margin-bottom: 10px; }
+    .ctrl label { font-size: 11px; color: #8090a0; display: block; margin-bottom: 4px; }
+    .ctrl input[type=range] { width: 100%; accent-color: #3a7bd5; }
+    .btn {
+      display: block; width: 100%; padding: 7px 0; margin-top: 6px;
+      background: #1a3a6a; border: 1px solid #3a6aaa; border-radius: 5px;
+      color: #90c0ff; font-size: 12px; cursor: pointer; text-align: center;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #2a4a8a; }
+    .btn.active { background: #0a4a2a; border-color: #2aaa6a; color: #80ffb0; }
+    #legend {
+      position: fixed; bottom: 20px; left: 20px; z-index: 10;
+      background: rgba(10,10,20,0.80); border: 1px solid #1e3a5f;
+      border-radius: 6px; padding: 10px 14px; font-size: 11px; line-height: 2;
+    }
+    .fw-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+    #phase-indicator {
+      position: fixed; top: 20px; right: 20px; z-index: 10;
+      background: rgba(10,10,20,0.85); border: 1px solid #1e3a5f;
+      border-radius: 8px; padding: 12px 18px; font-size: 11px;
+    }
+    .phase-item { margin-bottom: 5px; color: #3050a0; }
+    .phase-item.active { color: #60d0ff; font-weight: 600; }
+    .phase-item.done { color: #40a060; }
+    #cave-map-panel {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 10; background: rgba(5,8,18,0.92); border: 1px solid #1e3a5f;
+      border-radius: 8px; padding: 8px 12px 10px;
+    }
+    #cave-map-panel h2 {
+      font-size: 10px; color: #4a8abf; font-weight: 600; letter-spacing: 0.06em;
+      margin-bottom: 5px; text-align: center;
+    }
+    #cave-map-legend {
+      display: flex; gap: 14px; justify-content: center; margin-top: 4px;
+      font-size: 9px; color: #5070a0;
+    }
+    #cave-map-legend span { display: flex; align-items: center; gap: 4px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  </style>
+</head>
+<body>
+<div id="canvas-container"></div>
+
+<div id="ui">
+  <h1>▶ CUBE SWARM ROBOT SIMULATOR</h1>
+  <div class="ctrl">
+    <label>フライホイール回転速度</label>
+    <input type="range" id="fw-speed" min="0" max="100" value="60">
+  </div>
+  <div class="ctrl">
+    <label>移動速度</label>
+    <input type="range" id="move-speed" min="10" max="100" value="50">
+  </div>
+  <div class="ctrl">
+    <label>群れの数: <span id="squad-count-label">1</span></label>
+    <input type="range" id="squad-count" min="1" max="6" value="1" step="1">
+  </div>
+  <div class="ctrl">
+    <label>1群の機数: <span id="squad-size-label">1</span> ／ 合計 <span id="robot-count-label">1</span>機</label>
+    <input type="range" id="squad-size" min="1" max="8" value="1" step="1">
+    <input type="range" id="robot-count" min="1" max="48" value="1" step="1" style="display:none">
+  </div>
+  <button class="btn" id="btn-move">移動モード（ロール探索）</button>
+  <button class="btn" id="btn-structure">構造物形成モード</button>
+  <button class="btn" id="btn-reset">リセット</button>
+  <div style="margin-top:10px;font-size:10px;color:#4a6a8a;margin-bottom:4px">視点プリセット</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+    <button class="btn" onclick="setView('overview')" style="font-size:10px;padding:4px 0">[R] 全体</button>
+    <button class="btn" onclick="setView('entrance')" style="font-size:10px;padding:4px 0">[E] 入口</button>
+    <button class="btn" onclick="setView('top')"      style="font-size:10px;padding:4px 0">[T] 真上</button>
+    <button class="btn" onclick="setView('deep')"     style="font-size:10px;padding:4px 0">[D] 奥部</button>
+  </div>
+  <a class="btn" href="attitude.html" target="_blank" style="text-decoration:none;display:block;margin-top:12px;border-color:#1a3a5a;color:#5090c0;font-size:11px;">🛰 3軸姿勢制御シミュレータ（別タブ）</a>
+  <a class="btn" href="/status.html" style="text-decoration:none;display:block;border-color:#1a3a5a;color:#5090c0;font-size:11px;">📋 開発状況を見る</a>
+</div>
+
+<div id="phase-indicator">
+  <div class="phase-item active" id="ph1">● Phase 1: 単機ローリング</div>
+  <div class="phase-item" id="ph2">○ Phase 2: 群制御</div>
+  <div class="phase-item" id="ph3">○ Phase 3: 構造物形成</div>
+  <div class="phase-item" id="ph4">○ Phase 4: 3Dマッピング</div>
+</div>
+
+<div id="legend">
+  <span class="fw-dot" style="background:#ff2244"></span> X軸フライホイール（前後ロール）<br>
+  <span class="fw-dot" style="background:#22ff44"></span> Y軸フライホイール（旋回）<br>
+  <span class="fw-dot" style="background:#2244ff"></span> Z軸フライホイール（左右ロール）<br>
+  <span style="display:inline-block;width:14px;height:6px;background:#33dd55;border:1px solid #0a0e18;vertical-align:middle;margin-right:4px"></span>バッテリー残量（機体上部・<span style="color:#33dd55">緑</span>→<span style="color:#ffcc22">黄</span>→<span style="color:#ff3322">赤</span>で帰還・充電）<br>
+  <span style="color:#556677; font-size:10px">左ドラッグ: 回転 ／ 右ドラッグ: 平行移動 ／ スクロール: ズーム<br>キー: R 全体 ／ E 入口 ／ T 真上 ／ D 奥部</span>
+</div>
+
+<div id="cave-map-panel">
+  <h2>▶ 洞窟探査マップ（トップビュー） — X: 探索方向 ／ Z: チューブ幅方向</h2>
+  <canvas id="cave-map" width="700" height="270" style="display:block;border-radius:4px;"></canvas>
+  <div id="cave-map-legend">
+    <span><span class="legend-dot" style="background:rgba(30,90,170,0.85)"></span>ムーバー探索済</span>
+    <span><span class="legend-dot" style="background:rgba(0,200,130,0.85)"></span>センサー探索済</span>
+    <span><span class="legend-dot" style="background:#080f1a;border:1px solid #1a3050"></span>未探索</span>
+    <span><span class="legend-dot" style="background:rgba(220,130,30,0.7)"></span>低溶岩(乗越可)</span>
+    <span><span class="legend-dot" style="background:rgba(170,50,40,0.85)"></span>溶岩壁(不可)</span>
+    <span><span class="legend-dot" style="background:#ff8800;border-radius:50%"></span>探索機</span>
+    <span><span class="legend-dot" style="background:#ffff00;border-radius:50%"></span>リレー機</span>
+    <span style="display:flex;align-items:center;gap:4px">
+      <span style="width:16px;height:0;border-top:2px dashed rgba(0,255,160,0.7);display:inline-block"></span>最大深度
+    </span>
+    <span id="cave-map-stats" style="color:#60a0cc"></span>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+window.__sim = {};
+
+// ── Renderer ──────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+// ── Scene ─────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04050f);
+scene.fog = new THREE.Fog(0x04050f, 60, 130);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(50, 32, 68);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.target.set(25, 0, 0);
+controls.minDistance = 3;
+controls.maxDistance = 300;
+controls.maxPolarAngle = Math.PI * 0.82;
+
+// ── Lighting ──────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x8899ff, 1.8));
+
+const sun = new THREE.DirectionalLight(0xffffff, 3.0);
+sun.position.set(6, 12, 6);
+sun.castShadow = true;
+scene.add(sun);
+
+const fill1 = new THREE.PointLight(0x4488ff, 4, 14);
+fill1.position.set(-3, 4, 2);
+scene.add(fill1);
+
+const fill2 = new THREE.PointLight(0x00ffcc, 2.5, 10);
+fill2.position.set(3, 2, -3);
+scene.add(fill2);
+
+// ── Environment ───────────────────────────────────────────────
+// 環境は横穴（溶岩地形あり）のみ — 2026-07-20 ユーザー判断でbox環境を廃止
+let envMode = 'lateral';
+const envGroup = new THREE.Group();
+scene.add(envGroup);
+
+// ── 横穴環境（月面溶岩チューブ水平坑・天窓＋高さ付き溶岩地形） ──
+// 断面: 床は平坦（固化溶岩）＋上部は半楕円アーチ（幅30×高8）。
+// セルごとに溶岩の高さを持ち、段差 Δh ≤ CLIMB_MAX のみ乗り越え可能。
+//   低い溶岩流 h=0.4 → 登坂して越えられる
+//   溶岩壁     h=2.2 → 越えられず迂回が必要
+// CLIMB_MAX=0.5（機体高の半分）の根拠[試算]: 月重力・4800rpm電気ブレーキで
+// 段差0.5aの必要角運動量は L_req=√(2·mgΔh·I_pivot)≈0.016 ≪ 保有L₀=0.040。
+// エネルギー的には登れるが、着地安定（CoMがレッジを越える）の幾何条件が
+// s≲0.5a で頭打ちになるため 0.5 を上限とする。
+const lavaHeights = new Map();   // "x,z"（整数座標）→ 高さ [unit]
+const CLIMB_MAX = 0.5;
+const SKY_X = 6;   // 天窓（スカイライト）位置 — スポーン・帰還の原点
+// 探査グリッド定数（2026-07-20大型化: 100×60ユニット＝実寸1,000m×600m）
+// ※missionParamsより先に評価されるbuildLateralEnvからも参照するためここで定義
+const GRID_NX = 50, GRID_NZ = 30, GRID_HALF_NZ = 15, GRID_CELL = 2;
+function heightAt(x, z) {
+  return envMode === 'lateral' ? (lavaHeights.get(x + ',' + z) ?? 0) : 0;
+}
+
+// 決定論的疑似ノイズ（岩肌のデコボコ用）
+function rockN(a, b) {
+  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+function buildLateralEnv() {
+  envGroup.clear();
+  lavaHeights.clear();
+
+  // 寸法はグリッド定数から導出（nx50×nz30 → 100×60ユニット＝1,000m×600m）
+  const L  = GRID_NX * GRID_CELL;        // 100
+  const RZ = GRID_HALF_NZ * GRID_CELL;   // 30
+  const RY = 10;
+
+  // 床＋グリッド
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(L, RZ * 2),
+    new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(L / 2, 0, 0);
+  floor.receiveShadow = true;
+  envGroup.add(floor);
+  {
+    const gMat = new THREE.LineBasicMaterial({ color: 0x1a2a4a, transparent: true, opacity: 0.55 });
+    const pts = [];
+    for (let i = 0; i <= GRID_NX; i++) { pts.push(new THREE.Vector3(i * 2, 0.01, -RZ), new THREE.Vector3(i * 2, 0.01, RZ)); }
+    for (let j = 0; j <= GRID_NZ; j++) { pts.push(new THREE.Vector3(0, 0.01, -RZ + j * 2), new THREE.Vector3(L, 0.01, -RZ + j * 2)); }
+    envGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), gMat));
+  }
+
+  // 岩肌の半楕円アーチシェル（内側からのみ見える: BackSide）
+  {
+    const NU = 100, NV = 32;
+    const pos = [], idx = [];
+    for (let i = 0; i <= NU; i++) {
+      const x = (i / NU) * L;
+      for (let j = 0; j <= NV; j++) {
+        const v = (j / NV) * Math.PI;   // 0=+z床際 → π=−z床際
+        const bump = 1 + (rockN(i, j) - 0.5) * 0.18 * Math.sin(v);  // 床際は乱さない
+        pos.push(x, RY * Math.sin(v) * bump, RZ * Math.cos(v) * bump);
+      }
+    }
+    for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+      const a = i * (NV + 1) + j, b = a + NV + 1;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const shell = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+      color: 0x121a2c, roughness: 1, side: THREE.BackSide,
+    }));
+    envGroup.add(shell);
+  }
+
+  // 奥壁（x=50・半楕円）
+  {
+    const shape = new THREE.Shape();
+    shape.moveTo(-RZ, 0);
+    for (let j = 0; j <= 24; j++) {
+      const v = (j / 24) * Math.PI;
+      shape.lineTo(-RZ * Math.cos(v), RY * Math.sin(v));
+    }
+    shape.lineTo(RZ, 0);
+    const back = new THREE.Mesh(new THREE.ShapeGeometry(shape),
+      new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 1, side: THREE.DoubleSide }));
+    back.rotation.y = -Math.PI / 2;
+    back.position.set(L, 0, 0);
+    envGroup.add(back);
+  }
+
+  // 天窓（スカイライト）: シャフト＋光柱＋床の光斑＋光源
+  // 主天窓=SKY_X（スポーン・帰還の原点）、第2天窓=奥部の採光（視覚のみ）
+  function addSkylight(sx) {
+    const SKY_R = 2.5;
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(SKY_R, SKY_R, 8, 32, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0x1a2438, roughness: 1, side: THREE.DoubleSide }));
+    shaft.position.set(sx, RY + 3.2, 0);
+    envGroup.add(shaft);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(SKY_R * 0.75, SKY_R * 1.05, RY, 32, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xfff4d8, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+    beam.position.set(sx, RY / 2, 0);
+    envGroup.add(beam);
+    const spot = new THREE.Mesh(new THREE.CircleGeometry(SKY_R * 1.05, 32),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.22, depthWrite: false }));
+    spot.rotation.x = -Math.PI / 2;
+    spot.position.set(sx, 0.02, 0);
+    envGroup.add(spot);
+    const sun2 = new THREE.PointLight(0xfff0d0, 6, 22);
+    sun2.position.set(sx, RY - 1, 0);
+    envGroup.add(sun2);
+  }
+  addSkylight(SKY_X);
+  addSkylight(62);
+
+  // ── 溶岩地形（高さ付き）────────────────────────────────
+  const LOW = 0.4, TALL = 2.2;
+
+  // 低い溶岩流①: x=14,15 の全幅バンド（迂回不可 → 必ず乗り越える）
+  for (let x = 14; x <= 15; x++) for (let z = -RZ; z <= RZ; z++) lavaHeights.set(x + ',' + z, LOW);
+  // 低い溶岩だまり（前半・後半）
+  for (let x = 30; x <= 32; x++) for (let z = -8; z <= -4; z++) lavaHeights.set(x + ',' + z, LOW);
+  for (let x = 38; x <= 40; x++) for (let z = 6; z <= 9; z++) lavaHeights.set(x + ',' + z, LOW);
+  for (let x = 70; x <= 73; x++) for (let z = -12; z <= -8; z++) lavaHeights.set(x + ',' + z, LOW);
+  for (let x = 82; x <= 84; x++) for (let z = 14; z <= 18; z++) lavaHeights.set(x + ',' + z, LOW);
+  // 低い溶岩マウンド（散在）
+  for (const [x, z] of [[18, 0], [10, 10], [28, 12], [44, 10], [21, -9],
+                        [55, 20], [66, -22], [80, -20], [90, 10], [45, -25], [58, 5]]) {
+    lavaHeights.set(x + ',' + z, LOW);
+  }
+
+  // 溶岩壁①: x=24の列（z=-30..2）で部分閉塞（z≥3側に通路）
+  for (let z = -RZ; z <= 2; z++) lavaHeights.set('24,' + z, TALL);
+  // 溶岩壁②: x=60の列（z=-2..30）で部分閉塞（z≤-3側に通路 — ①と反対側でジグザグ動線）
+  for (let z = -2; z <= RZ; z++) lavaHeights.set('60,' + z, TALL);
+  // 散在の高い岩塊
+  for (const [x, z] of [[12, -6], [35, 5], [40, -3], [31, -11],
+                        [52, -18], [75, 15], [88, -5], [68, 24], [47, 18]]) {
+    lavaHeights.set(x + ',' + z, TALL);
+  }
+
+  // メッシュ生成
+  const lowMat = new THREE.MeshStandardMaterial({
+    color: 0x3a2018, roughness: 0.9, emissive: new THREE.Color(0x461200), emissiveIntensity: 0.22,
+  });
+  const tallMat = new THREE.MeshStandardMaterial({ color: 0x241a22, roughness: 1 });
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x28334a, roughness: 1 });
+  for (const [key, h] of lavaHeights) {
+    const [x, z] = key.split(',').map(Number);
+    if (h <= CLIMB_MAX) {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(1, h, 1), lowMat);
+      slab.position.set(x, h / 2, z);
+      envGroup.add(slab);
+    } else {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(1, h, 1), tallMat);
+      wall.position.set(x, h / 2, z);
+      envGroup.add(wall);
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5, 0), rockMat);
+      const s = 0.8 + rockN(x, z) * 0.4;
+      rock.scale.set(s, s * 0.7, s);
+      rock.rotation.set(rockN(x, z) * 3, rockN(z, x) * 3, 0);
+      rock.position.set(x, h + 0.15, z);
+      envGroup.add(rock);
+    }
+  }
+}
+
+buildLateralEnv();
+
+// ── Cube Robot Factory ────────────────────────────────────────
+const CUBE_S = 1.0;
+const HS = CUBE_S / 2;
+
+// バッテリー可視化: 各機の頭上にバー（scene直下・毎フレームcamera向きに追従）。
+// ロボットのロール回転を継承しないよう、robotの子ではなくbatteryGroupに置く。
+const batteryGroup = new THREE.Group();
+scene.add(batteryGroup);
+const BAT_W = 0.9, BAT_H = 0.15;
+const MANUAL_BATTERY_DRAIN_S = 90;   // 手動モードで探索機が消耗しきる秒数[試算]
+let _lastAgentBatteryTime = 0;       // AIミッションがbatteryを設定した最終時刻（手動消費との排他用）
+
+function makeBatteryBar() {
+  const pivot = new THREE.Group();
+  // 背景（枠）
+  const bg = new THREE.Mesh(new THREE.PlaneGeometry(BAT_W + 0.06, BAT_H + 0.06),
+    new THREE.MeshBasicMaterial({ color: 0x0a0e18, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+  pivot.add(bg);
+  // 残量フィル（左端アンカー: geometryを右へ寄せて左端をx=0に）
+  const fillGeo = new THREE.PlaneGeometry(BAT_W, BAT_H);
+  fillGeo.translate(BAT_W / 2, 0, 0);
+  const fill = new THREE.Mesh(fillGeo,
+    new THREE.MeshBasicMaterial({ color: 0x33dd55, side: THREE.DoubleSide, depthWrite: false }));
+  fill.position.set(-BAT_W / 2, 0, 0.001);
+  pivot.add(fill);
+  pivot.visible = false;
+  batteryGroup.add(pivot);
+  return { pivot, fill };
+}
+
+function createRobot(bodyColor) {
+  const group = new THREE.Group();
+
+  // Transparent cube body
+  const bodyGeo = new THREE.BoxGeometry(CUBE_S, CUBE_S, CUBE_S);
+  const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({
+    color: bodyColor, roughness: 0.15, metalness: 0.85,
+    transparent: true, opacity: 0.45,
+  }));
+  body.castShadow = true;
+  group.add(body);
+
+  // Sharp edges
+  group.add(new THREE.LineSegments(
+    new THREE.EdgesGeometry(bodyGeo),
+    new THREE.LineBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 0.8 })
+  ));
+
+  // ── 3-axis flywheels — JAXA超小型三軸姿勢制御モジュール参考 ─
+  // 薄い円盤（CylinderGeometry）× 3枚を各軸方向にオフセット配置
+  // ref: https://www.kenkai.jaxa.jp/research/automation/triaxial.html
+  // offset = 0.5 - FW_TH/2 = 0.47（外縁が内面に接触）
+  // R < offset を保証 → 隣軸ディスクの面内にエッジが入らず干渉ゼロ
+  const FW_R    = 0.46;   // ディスク半径（最大値: offset=0.47 に対し 0.01 の安全代）
+  const FW_TH   = 0.06;   // ディスク厚さ
+  const N_SPOKES = 6;     // スポーク本数
+
+  function makeDiskFW(hexColor) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: hexColor, metalness: 0.88, roughness: 0.08,
+      emissive: new THREE.Color(hexColor), emissiveIntensity: 0.3,
+    });
+    const disk = new THREE.Mesh(new THREE.CylinderGeometry(FW_R, FW_R, FW_TH, 32), mat);
+
+    // スポーク（XZ平面 — orientグループの回転で正しい軸面に揃う）
+    const spokePos = [];
+    for (let i = 0; i < N_SPOKES; i++) {
+      const a = (i / N_SPOKES) * Math.PI * 2;
+      spokePos.push(0, 0, 0, Math.cos(a) * FW_R * 0.85, 0, Math.sin(a) * FW_R * 0.85);
+    }
+    const spokeGeo = new THREE.BufferGeometry();
+    spokeGeo.setAttribute('position', new THREE.Float32BufferAttribute(spokePos, 3));
+    const spokes = new THREE.LineSegments(spokeGeo,
+      new THREE.LineBasicMaterial({ color: hexColor, transparent: true, opacity: 0.8 }));
+
+    const orient = new THREE.Group();
+    orient.add(disk);
+    orient.add(spokes);
+    return { orient, disk };
+  }
+
+  // X軸FW（ディスク面=YZ、スピン軸=X）: orientをZ軸で90°回転、X方向にオフセット
+  const { orient: fwX_orient, disk: fw_x } = makeDiskFW(0xff2244);
+  fwX_orient.rotation.z = Math.PI / 2;
+  const fwX_spinner = new THREE.Group();
+  fwX_spinner.add(fwX_orient);
+  fwX_spinner.position.x =  0.47; // 0.5 - FW_TH/2: +X内面に接触
+  group.add(fwX_spinner);
+
+  // Y軸FW（ディスク面=XZ、スピン軸=Y）: デフォルト方向のまま、Y方向にオフセット
+  const { orient: fwY_orient, disk: fw_y } = makeDiskFW(0x22ff44);
+  const fwY_spinner = new THREE.Group();
+  fwY_spinner.add(fwY_orient);
+  fwY_spinner.position.y = -0.47; // 0.5 - FW_TH/2: -Y内面に接触
+  group.add(fwY_spinner);
+
+  // Z軸FW（ディスク面=XY、スピン軸=Z）: orientをX軸で90°回転、Z方向にオフセット
+  const { orient: fwZ_orient, disk: fw_z } = makeDiskFW(0x2244ff);
+  fwZ_orient.rotation.x = Math.PI / 2;
+  const fwZ_spinner = new THREE.Group();
+  fwZ_spinner.add(fwZ_orient);
+  fwZ_spinner.position.z =  0.47; // 0.5 - FW_TH/2: +Z内面に接触
+  group.add(fwZ_spinner);
+
+  // Body glow
+  const glow = new THREE.PointLight(bodyColor, 1.5, 3.5);
+  group.add(glow);
+
+  const batBar = makeBatteryBar();
+
+  group.userData = {
+    body, fw_x, fw_y, fw_z, glow, batBar,
+    fwX_spinner, fwY_spinner, fwZ_spinner,
+    fwAngle: { x: 0, y: 0, z: 0 },
+    rollState: null,
+    targetCell: null,
+    idlePhase: Math.random() * Math.PI * 2,
+    nextRollTime: performance.now() + Math.random() * 500,
+    patternIdx: 0,
+    // AI Agent fields
+    agentType: 'mover',      // 'sensor' | 'mover' | 'builder'
+    isAnchor: false,         // Builder型がアンカー完了したか
+    anchorTarget: null,      // Builder型のアンカー目標位置 [x, y, z]
+    battery: 1.0,
+  };
+
+  return group;
+}
+
+// ── Roll Mechanics ────────────────────────────────────────────
+// fwSign: direction of flywheel angular velocity change during roll.
+// Physics: body gains angular momentum in roll axis direction →
+//   flywheel loses angular momentum in same direction.
+//   fwSign = -sign(roll_angle) (flywheel decelerates when body rolls forward/left,
+//                                accelerates when body rolls back/right)
+//
+// 転がりの軌道形状は attitude.html M3 と同じ運動量ブレーキ物理
+// （I_e φ̈ = mgd·sinφ + τ_brake, build-plan §5 の実機値・月重力）を
+// 事前積分した ROLL_PROFILE に従う。時間軸のみデモ用に正規化
+// （進行はprogressベースのまま → 群制御・衝突予約・ミッション系は不変）。
+const ROLL_DIRS = {
+  forward: { pivotOfs: new THREE.Vector3(0,  -HS,  HS), axis: new THREE.Vector3(1, 0, 0), angle:  Math.PI / 2, fw: 'x', fwSign: -1 },
+  back:    { pivotOfs: new THREE.Vector3(0,  -HS, -HS), axis: new THREE.Vector3(1, 0, 0), angle: -Math.PI / 2, fw: 'x', fwSign: +1 },
+  right:   { pivotOfs: new THREE.Vector3( HS, -HS,  0), axis: new THREE.Vector3(0, 0, 1), angle: -Math.PI / 2, fw: 'z', fwSign: +1 },
+  left:    { pivotOfs: new THREE.Vector3(-HS, -HS,  0), axis: new THREE.Vector3(0, 0, 1), angle:  Math.PI / 2, fw: 'z', fwSign: -1 },
+};
+
+// ── Physical roll profile（実力学の事前積分・月重力） ──────────
+const SPINUP_FRAC = 0.18;  // progressのうちスピンアップ演出に充てる区間
+const ROLL_PROFILE = (() => {
+  const Ie = 4.0e-3, m = 0.6, d = 0.1 / Math.SQRT2, Iw = 8.0e-5;
+  const g = 1.62;                    // 月面（縦孔・溶岩チューブ環境）
+  const tauB = 1.1;                  // 電気ブレーキ [N·m]
+  let ww = 4800 * Math.PI * 2 / 60;  // ブレーキ開始時 4800rpm
+  let phi = -Math.PI / 4, phid = 0, t = 0, brakeEndT = 0;
+  const h = 1 / 4000, ts = [], phis = [];
+  while (phi < Math.PI / 4 && t < 5) {
+    let tau = 0;
+    if (ww > 0) {
+      tau = tauB;
+      ww = Math.max(0, ww - tauB / Iw * h);
+      if (ww === 0) brakeEndT = t;
+    }
+    phid += (m * g * d * Math.sin(phi) + tau) / Ie * h;
+    phi += phid * h;
+    t += h;
+    ts.push(t); phis.push(phi);
+  }
+  // 正規化テーブル: f=角度進行率(0→1), wf=ホイール速度係数(1→0, ブレーキ形状)
+  const T = t, N = 96;
+  const f = new Float32Array(N + 1), wf = new Float32Array(N + 1);
+  let j = 0;
+  for (let i = 0; i <= N; i++) {
+    const tt = (i / N) * T;
+    while (j < ts.length - 1 && ts[j] < tt) j++;
+    f[i] = Math.min(1, Math.max(0, (phis[j] + Math.PI / 4) / (Math.PI / 2)));
+    wf[i] = brakeEndT > 0 && tt < brakeEndT ? 1 - tt / brakeEndT : 0;
+  }
+  f[N] = 1;
+  return { f, wf, N };
+})();
+function rollShape(u, arr) {
+  const x = Math.min(Math.max(u, 0), 1) * ROLL_PROFILE.N;
+  const i = Math.floor(x), fr = x - i;
+  const a = arr[i], b = arr[Math.min(i + 1, ROLL_PROFILE.N)];
+  return a + (b - a) * fr;
+}
+
+// ── Collision helpers ─────────────────────────────────────────
+const DIR_OFFSET = { forward: [0, 1], back: [0, -1], right: [1, 0], left: [-1, 0] };
+
+function getTargetCell(robot, dir) {
+  const [dx, dz] = DIR_OFFSET[dir];
+  return { x: Math.round(robot.position.x) + dx, z: Math.round(robot.position.z) + dz };
+}
+
+function isCellBlocked(target, self) {
+  return robots.some(r => {
+    if (r === self) return false;
+    // Check reserved destination
+    const tc = r.userData.targetCell;
+    if (tc && tc.x === target.x && tc.z === target.z) return true;
+    // Check current snapped position (only if not mid-roll)
+    if (!r.userData.rollState) {
+      if (Math.round(r.position.x) === target.x && Math.round(r.position.z) === target.z) return true;
+    }
+    return false;
+  });
+}
+
+function startRoll(robot, dir, bypassCollision = false) {
+  const ud = robot.userData;
+  if (ud.rollState) return false;
+  const p = ROLL_DIRS[dir];
+  if (!p) return false;
+
+  // 現在セルと移動先セルの床高さ（横穴の溶岩地形。他環境では常に0）
+  const curX = Math.round(robot.position.x), curZ = Math.round(robot.position.z);
+  const yFrom = heightAt(curX, curZ);
+  const target = getTargetCell(robot, dir);
+
+  // 境界と段差は帰還（bypass）中も常に判定 — 溶岩壁のすり抜け防止
+  {
+    const { nx, cellSize, halfNz } = missionParams;
+    const xMax =  nx * cellSize - 1;          // 49
+    const zMax =  halfNz * cellSize;           // 14
+    const zMin = -halfNz * cellSize;           // -14
+    if (target.x < 0 || target.x > xMax || target.z < zMin || target.z > zMax) return false;
+  }
+  // 段差判定: 登り Δh > CLIMB_MAX は運動量不足＋着地不安定で不可（→迂回）
+  const yTo = heightAt(target.x, target.z);
+  if (yTo - yFrom > CLIMB_MAX) return false;
+
+  if (!bypassCollision) {
+    // 他機との衝突・セル予約のみbypass対象
+    if (isCellBlocked(target, robot)) return false;
+    ud.targetCell = target;
+  }
+
+  const pivotWorld = robot.position.clone().add(p.pivotOfs);
+  ud.rollState = {
+    axis: p.axis.clone(),
+    angle: p.angle,
+    pivotWorld,
+    initRelPos: robot.position.clone().sub(pivotWorld),
+    initQuat: robot.quaternion.clone(),
+    progress: 0,
+    activeFW: p.fw,
+    fwSign: p.fwSign,
+    yFrom, yTo,
+  };
+  return true;
+}
+
+function updateRoll(robot, dt, speed) {
+  const ud = robot.userData;
+  const rs = ud.rollState;
+  if (!rs) return;
+
+  rs.progress = Math.min(rs.progress + dt * speed, 1.0);
+  const t = rs.progress;
+  // スピンアップ区間は静止 → 以降は実力学プロファイルの角度進行
+  const eased = t < SPINUP_FRAC ? 0
+    : rollShape((t - SPINUP_FRAC) / (1 - SPINUP_FRAC), ROLL_PROFILE.f);
+  const curAngle = rs.angle * eased;
+
+  const rotQ = new THREE.Quaternion().setFromAxisAngle(rs.axis, curAngle);
+  robot.position.copy(rs.pivotWorld).add(rs.initRelPos.clone().applyQuaternion(rotQ));
+  robot.quaternion.multiplyQuaternions(rotQ, rs.initQuat);
+
+  // 段差の登坂/降下: 高さを回転に重ねてブレンド（登りは前半から・降りは後半に落下）
+  const dhY = (rs.yTo ?? 0) - (rs.yFrom ?? 0);
+  if (dhY !== 0) {
+    const w = dhY > 0 ? (t - 0.15) / 0.7 : (t - 0.55) / 0.4;
+    const u = Math.max(0, Math.min(1, w));
+    robot.position.y += dhY * u * u * (3 - 2 * u);
+  }
+
+  if (rs.progress >= 1.0) {
+    robot.position.x = Math.round(robot.position.x);
+    robot.position.y = (rs.yTo ?? 0) + HS;
+    robot.position.z = Math.round(robot.position.z);
+    ud.rollState = null;
+    ud.targetCell = null;  // release reservation
+    totalMoves++;
+    const movesEl = document.getElementById('hud-moves-val');
+    if (movesEl) movesEl.textContent = totalMoves.toLocaleString();
+  }
+}
+
+// Square exploration pattern (3 steps each side)
+const EXPLORATION_PATTERN = [
+  'forward','forward','forward',
+  'right','right','right',
+  'back','back','back',
+  'left','left','left',
+];
+
+// ── Structure Targets ─────────────────────────────────────────
+function computeStructureTargets(count) {
+  if (count >= 3) {
+    // Phase 3 Step A: 横一列 (x=0..count-1, y=HS, z=0)
+    // Step B (立ち上げ) は towerPhase=='raising' で動的に処理
+    return Array.from({ length: count }, (_, i) =>
+      new THREE.Vector3(i, HS, 0)
+    );
+  }
+  // Phase 2: XZ平面フォーメーション
+  const positions = [
+    [ 0,  0], [ 1,  0], [-1,  0],
+    [ 0,  1], [ 1, -1], [-1,  1],
+  ];
+  return positions.slice(0, count).map(([x, z]) =>
+    new THREE.Vector3(x, HS, z)
+  );
+}
+
+// ── 経路探索（BFS）─────────────────────────────────────────────
+// 整数グリッド（x 0..49, z -14..14）上で地形の段差ルール
+// （登り Δh ≤ CLIMB_MAX、降りは自由）に従う最短経路を求める。
+// 溶岩壁の迂回・切れ目の通過を正しく計画できる。到達不能なら
+// 目標に最も近づける到達可能セルまでの経路を返す。他機は動くので無視
+// （実際のロール時に衝突判定され、渋滞が続けば経路を引き直す）。
+function bfsPath(sx, sz, tx, tz) {
+  const XMAX = GRID_NX * GRID_CELL - 1;
+  const zM   = GRID_HALF_NZ * GRID_CELL;
+  const ZMIN = -zM, ZMAX = zM;
+  const stride = 2 * zM + 3;
+  const key = (x, z) => (x + 1) * stride + (z + zM + 1);
+  const prev = new Map();
+  const queue = [[sx, sz]];
+  prev.set(key(sx, sz), null);
+  let best = [sx, sz], bestD = Math.abs(sx - tx) + Math.abs(sz - tz);
+  while (queue.length) {
+    const [x, z] = queue.shift();
+    const d = Math.abs(x - tx) + Math.abs(z - tz);
+    if (d < bestD) { bestD = d; best = [x, z]; }
+    if (x === tx && z === tz) break;
+    const h = heightAt(x, z);
+    for (const [nx2, nz2] of [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]]) {
+      if (nx2 < 0 || nx2 > XMAX || nz2 < ZMIN || nz2 > ZMAX) continue;
+      const k = key(nx2, nz2);
+      if (prev.has(k)) continue;
+      if (heightAt(nx2, nz2) - h > CLIMB_MAX) continue;   // 登れない段差
+      prev.set(k, [x, z]);
+      queue.push([nx2, nz2]);
+    }
+  }
+  // 経路復元（目標 or 最接近セルから）
+  const goal = prev.has(key(tx, tz)) ? [tx, tz] : best;
+  const path = [];
+  let cur = goal;
+  while (cur && !(cur[0] === sx && cur[1] === sz)) {
+    path.unshift(cur);
+    cur = prev.get(key(cur[0], cur[1]));
+  }
+  return path;
+}
+
+// Roll one step toward a target position（BFS経路に沿って1歩進む）
+function rollTowardTarget(robot, target, bypassCollision = false) {
+  const ud = robot.userData;
+  const tx = Math.max(0, Math.min(GRID_NX * GRID_CELL - 1, Math.round(target.x)));
+  const tz = Math.max(-GRID_HALF_NZ * GRID_CELL, Math.min(GRID_HALF_NZ * GRID_CELL, Math.round(target.z)));
+  const cx = Math.round(robot.position.x), cz = Math.round(robot.position.z);
+  if (cx === tx && cz === tz) { ud.path = null; return; }
+  const goalKey = tx + ',' + tz;
+  if (!ud.path || ud.path.length === 0 || ud.pathGoal !== goalKey) {
+    ud.path = bfsPath(cx, cz, tx, tz);
+    ud.pathGoal = goalKey;
+    ud.pathFail = 0;
+  }
+  if (!ud.path || ud.path.length === 0) return;   // 到達不能（現位置が最接近）
+  const next = ud.path[0];
+  // 経路先頭が現在地とずれていたら引き直し（衝突後の押し戻し等）
+  if (Math.abs(next[0] - cx) + Math.abs(next[1] - cz) !== 1) { ud.path = null; return; }
+  const dir = next[0] > cx ? 'right' : next[0] < cx ? 'left' : next[1] > cz ? 'forward' : 'back';
+  if (startRoll(robot, dir, bypassCollision)) {
+    ud.path.shift();
+    ud.pathFail = 0;
+  } else if (++ud.pathFail > 8) {
+    ud.path = null;   // 渋滞が続く: 次のティックで経路再計算
+  }
+}
+
+// ── Docking Rings (Phase 3) ───────────────────────────────────
+// プールとして事前生成し、毎フレーム位置・不透明度を更新する
+const dockRings = Array.from({ length: 5 }, () => {
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(CUBE_S * 0.52, 0.03, 8, 48),
+    new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0 })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.visible = false;
+  scene.add(ring);
+  return ring;
+});
+
+function updateDockRings(now) {
+  dockRings.forEach(r => { r.material.opacity = 0; r.visible = false; });
+  if (!structureMode || robots.length < 3) return;
+  const pulse = 0.6 + 0.4 * Math.sin(now / 400);
+
+  if (towerPhase === 'raising' || towerPhase === 'done') {
+    // 立ち上げ中／完了: ロボット間にリングを表示（連結を可視化）
+    const n = Math.min(robots.length - 1, dockRings.length);
+    for (let i = 0; i < n; i++) {
+      const ring = dockRings[i];
+      ring.visible = true;
+      ring.position.lerpVectors(robots[i].position, robots[i + 1].position, 0.5);
+      ring.rotation.x = Math.PI / 2; // 水平フラット
+      ring.material.opacity = pulse * 0.9;
+    }
+    return;
+  }
+
+  // lining_up: 隣接ロボット間の距離が近いとき点滅
+  let ri = 0;
+  for (let i = 0; i < robots.length - 1 && ri < dockRings.length; i++) {
+    const rA = robots[i], rB = robots[i + 1];
+    const dx = Math.abs(rB.position.x - rA.position.x - 1); // ideal spacing=1
+    if (dx < 0.3) {
+      const ring = dockRings[ri++];
+      ring.visible = true;
+      ring.position.lerpVectors(rA.position, rB.position, 0.5);
+      ring.rotation.set(0, 0, 0);
+      ring.rotation.y = Math.PI / 2; // 縦向き（X方向の接続）
+      ring.material.opacity = pulse * 0.6 * (1 - dx / 0.3);
+    }
+  }
+}
+
+// ── Relay Chain Visualization ─────────────────────────────────
+const chainLineMat = new THREE.LineBasicMaterial({ color: 0x00ffaa, transparent: true, opacity: 0.8 });
+const chainLineGeo = new THREE.BufferGeometry();
+chainLineGeo.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+const chainLine = new THREE.LineSegments(chainLineGeo, chainLineMat);
+scene.add(chainLine);
+
+let anchoredRobotIds = [];   // AI agentから受け取ったアンカー済みID
+
+function updateRelayChainVisual() {
+  const anchors = robots.filter((r, i) => anchoredRobotIds.includes(i));
+  if (anchors.length < 1) {
+    chainLineGeo.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+    chainLineGeo.attributes.position.needsUpdate = true;
+    return;
+  }
+  // スタート地点（天窓直下）から最初のアンカーまでと、アンカー間をすべてつなぐ
+  const sorted = [...anchors].sort((a, b) => a.position.x - b.position.x);
+  const pts = [];
+  const entry = new THREE.Vector3(SKY_X, HS + 0.5, 0);
+  pts.push(entry, sorted[0].position.clone().setY(HS + 0.5));
+  for (let i = 0; i < sorted.length - 1; i++) {
+    pts.push(sorted[i].position.clone().setY(HS + 0.5),
+             sorted[i+1].position.clone().setY(HS + 0.5));
+  }
+  const flat = pts.flatMap(p => [p.x, p.y, p.z]);
+  chainLineGeo.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3));
+  chainLineGeo.attributes.position.needsUpdate = true;
+}
+
+// ── Robot Instances ───────────────────────────────────────────
+const robots = [];
+const robotColors = [0x2255ff, 0xff5522, 0x22cc66, 0xffcc00, 0xcc22ff, 0x00ccff];
+
+// Sensor型: グリッドスキャン（右→前→左→前の繰り返し）
+const SENSOR_PATTERN = ['right','right','right','forward','left','left','left','forward'];
+// Mover型: 積極的な前進探索
+const MOVER_PATTERN  = ['forward','forward','right','forward','forward','left','forward','forward'];
+
+// 群れ（squad）: 各群は色系統・スポーン集団・担当zセクターを持つ。
+// 群数はUIスライダー（AIミッション経由の直接スポーンでは現在値を流用）
+let desiredSquads = 1;
+
+// 天窓直下を原点に同心リング状のスポーンセルを列挙（縦孔から降ろされた想定）。
+// 溶岩セル・場外はスキップ。
+function skylightSpawnCells(n) {
+  const xMax = GRID_NX * GRID_CELL - 1;
+  const zM   = GRID_HALF_NZ * GRID_CELL;
+  const cells = [];
+  for (let r = 0; r < 8 && cells.length < n; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const x = SKY_X + dx, z = dz;
+        if (x < 0 || x > xMax || z < -zM || z > zM) continue;
+        if ((lavaHeights.get(x + ',' + z) ?? 0) > 0) continue;
+        cells.push([x, z]);
+      }
+    }
+  }
+  return cells;
+}
+
+function spawnRobots(count) {
+  robots.forEach(r => scene.remove(r));
+  robots.length = 0;
+  while (batteryGroup.children.length) batteryGroup.remove(batteryGroup.children[0]);
+  const nSquads  = Math.max(1, Math.min(desiredSquads, count));
+  const perSquad = Math.ceil(count / nSquads);
+  const zSpan    = GRID_HALF_NZ * GRID_CELL * 2 - 2;   // 58
+  const sectorW  = zSpan / nSquads;
+  const cells = skylightSpawnCells(count);
+  let made = 0;
+  for (let s = 0; s < nSquads && made < count; s++) {
+    const zc = Math.round(-zSpan / 2 + sectorW * (s + 0.5));   // 探索の担当セクター（スポーン位置とは独立）
+    const baseColor = new THREE.Color(robotColors[s % robotColors.length]);
+    const inSquad = Math.min(perSquad, count - made);
+    for (let k = 0; k < inSquad; k++, made++) {
+      const col = baseColor.clone().offsetHSL(0, 0, (k % 4) * 0.05 - 0.07);
+      const r = createRobot(col.getHex());
+      const [sx, sz] = cells[made] ?? [SKY_X, 0];
+      r.position.set(sx, HS, sz);
+      r.userData.squadId = s;
+      r.userData.zHome = zc;
+      scene.add(r);
+      robots.push(r);
+    }
+  }
+  // 大規模時（13機〜）はロボット個別のPointLightを無効化（描画負荷対策）
+  const glowOn = count <= 12;
+  robots.forEach(r => { r.userData.glow.visible = glowOn; });
+}
+
+spawnRobots(1);
+
+// ── Mode State ────────────────────────────────────────────────
+let movingMode = false;
+let structureMode = false;
+let totalMoves = 0;  // ミッション通算ロール完了回数
+let structureTargets = [];
+
+// Tower build state (Phase 3 only)
+// 'lining_up' → 'raising' → 'done'
+let towerPhase = 'lining_up'; // 'lining_up' → 'lined_up' → 'raising' → 'done'
+let towerRaiseProgress = 0;
+let towerPivot = null;
+let towerRobotInitPositions = [];
+let towerLinedUpTime = 0;    // 横並び完了タイムスタンプ（ms）
+let towerRaisingStartTime = 0; // 立ち上げ開始タイムスタンプ（ms）
+
+// ── Debug ─────────────────────────────────────────────────────
+window.__sim.getState = () => ({
+  robotCount: robots.length, structureMode, movingMode,
+  positions: robots.map(r => ({ x: r.position.x.toFixed(2), y: r.position.y.toFixed(2), z: r.position.z.toFixed(2) }))
+});
+// 検証用: ロボット0を任意セルに置く／任意方向へロール試行／床高さ取得
+window.__sim.setPos = (x, z) => {
+  const r = robots[0]; if (!r) return false;
+  r.userData.rollState = null;
+  r.position.set(x, heightAt(x, z) + HS, z);
+  r.quaternion.identity();
+  return true;
+};
+window.__sim.tryRoll = dir => robots[0] ? startRoll(robots[0], dir) : false;
+window.__sim.heightAt = heightAt;
+window.__sim.commLineCount = () => commLinesGroup.children.length;
+window.__sim.setAllBattery = v => { robots.forEach(r => r.userData.battery = v); };
+window.__sim.batteryStates = () => robots.map(r => ({
+  b: +(r.userData.battery ?? 1).toFixed(2), returning: !!r.userData.returning, returned: !!r.userData.returned,
+}));
+window.__sim.debugRobot0 = () => {
+  const r = robots[0]; if (!r) return null;
+  const ud = r.userData;
+  return {
+    frontierTarget: ud.frontierTarget ?? null,
+    pathLen: ud.path ? ud.path.length : null, pathGoal: ud.pathGoal ?? null,
+    rollState: !!ud.rollState, battery: ud.battery,
+    agentType: ud.agentType, returning: !!ud.returning, returned: !!ud.returned,
+    localMap: ud.localMap ? ud.localMap.size : 0,
+    sharedMap: ud.sharedMap ? ud.sharedMap.size : 0,
+    isolated: !!ud.isolated,
+  };
+};
+
+// ── セルフテスト（URLに ?selftest で自動実行・回帰確認用） ──────
+// 横穴の溶岩地形ルール・転がり・群れ編成のロジックを検証する。
+// attitude.html?selftest の探査シミュ版。
+function runSimSelfTest() {
+  const out = [];
+  const ok = (name, cond) => out.push({ name, pass: !!cond });
+  const savedSquads = desiredSquads, savedCount = robots.length;
+  const savedMoving = movingMode, savedStructure = structureMode;
+  movingMode = false; structureMode = false;
+
+  // 横穴環境で地形テスト
+  buildLateralEnv();
+  desiredSquads = 1; spawnRobots(1);
+  const r0 = robots[0];
+  const place = (x, z) => { r0.userData.rollState = null; r0.position.set(x, heightAt(x, z) + HS, z); r0.quaternion.identity(); };
+
+  ok('地形: 平地h=0 / 低溶岩h=0.4 / 溶岩壁h=2.2',
+     heightAt(5, 0) === 0 && heightAt(14, 0) === 0.4 && heightAt(24, 0) === 2.2);
+
+  place(13, 0);
+  ok('段差: 低溶岩へ登坂受理（Δh=+0.4）', startRoll(r0, 'right') && r0.userData.rollState.yTo === 0.4);
+  // ロール完了駆動 → 着地座標と高さ
+  for (let i = 0; i < 200 && r0.userData.rollState; i++) updateRoll(r0, 1 / 60, 2.0);
+  ok('登坂完了: x=14・y=0.9（溶岩上）', Math.round(r0.position.x) === 14 && Math.abs(r0.position.y - 0.9) < 1e-6);
+
+  place(15, 0);
+  ok('段差: 低溶岩から降下受理（Δh=−0.4）', startRoll(r0, 'right') && r0.userData.rollState.yTo === 0);
+  for (let i = 0; i < 200 && r0.userData.rollState; i++) updateRoll(r0, 1 / 60, 2.0);
+  ok('降下完了: x=16・y=0.5（平地）', Math.round(r0.position.x) === 16 && Math.abs(r0.position.y - 0.5) < 1e-6);
+
+  place(23, 0);
+  ok('段差: 溶岩壁を拒否（Δh=+2.2）', !startRoll(r0, 'right'));
+  place(23, 6);
+  ok('段差: 壁の切れ目は受理', !!startRoll(r0, 'right'));
+  place(10, 30);
+  ok('境界: z=30からforward（z=31）を拒否', !startRoll(r0, 'forward'));
+
+  // ROLL_PROFILE の健全性
+  let mono = true;
+  for (let i = 1; i <= ROLL_PROFILE.N; i++) if (ROLL_PROFILE.f[i] < ROLL_PROFILE.f[i - 1] - 1e-6) mono = false;
+  ok('転がり軌道: f(u)が単調増加・f(1)=1', mono && Math.abs(ROLL_PROFILE.f[ROLL_PROFILE.N] - 1) < 1e-6);
+
+  // 群れ編成
+  desiredSquads = 5; spawnRobots(30);
+  const squads = new Map();
+  for (const r of robots) {
+    const s = r.userData.squadId;
+    if (!squads.has(s)) squads.set(s, []);
+    squads.get(s).push(r.userData.zHome);
+  }
+  const sizes = [...squads.values()].map(a => a.length);
+  const centers = [...squads.entries()].sort((a, b) => a[0] - b[0])
+    .map(([, zs]) => zs.reduce((p, c) => p + c, 0) / zs.length);
+  const sectorsOrdered = centers.every((c, i) => i === 0 || c > centers[i - 1]);
+  ok('群れ: 5群×6機に分割', squads.size === 5 && sizes.every(n => n === 6));
+  ok('群れ: 各群に別zセクターを割当（zHome昇順）', sectorsOrdered);
+  // スポーンは天窓直下の同心リング（全機が天窓から半径8以内・溶岩セル回避）
+  const nearSky = robots.every(r =>
+    Math.max(Math.abs(r.position.x - 6), Math.abs(r.position.z)) <= 8 &&
+    (lavaHeights.get(Math.round(r.position.x) + ',' + Math.round(r.position.z)) ?? 0) === 0);
+  ok('スポーン: 天窓を原点に集結（溶岩セル回避）', nearSky);
+  ok('負荷対策: 30機で個別ライト無効', robots.every(r => r.userData.glow.visible === false));
+  desiredSquads = 1; spawnRobots(6);
+  ok('負荷対策: 6機では個別ライト有効', robots.every(r => r.userData.glow.visible === true));
+
+  // バッテリー: 各機にバーがあり、閾値以下で帰還フラグが立つ
+  spawnRobots(3);
+  ok('バッテリー: 全機にバーが生成される', robots.every(r => r.userData.batBar && r.userData.batBar.pivot));
+  const savedMoving2 = movingMode, savedAgentT = _lastAgentBatteryTime;
+  movingMode = true; _lastAgentBatteryTime = 0;
+  robots.forEach(r => { r.position.set(40, HS, 0); r.userData.battery = 0.22; r.userData.rollState = null; r.userData.returning = false; r.userData.returned = false; r.userData.agentType = 'mover'; });
+  for (let i = 0; i < 30; i++) physicsUpdate();
+  ok('バッテリー: 閾値以下で帰還フラグが立つ', robots.some(r => r.userData.returning));
+  movingMode = savedMoving2; _lastAgentBatteryTime = savedAgentT;
+
+  // 復元
+  buildLateralEnv();
+  desiredSquads = savedSquads; spawnRobots(savedCount);
+  movingMode = savedMoving; structureMode = savedStructure;
+
+  // 結果表示
+  const passAll = out.every(o => o.pass);
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:30;' +
+    'background:rgba(5,10,25,0.95);border:1px solid ' + (passAll ? '#2aaa6a' : '#aa4a2a') + ';' +
+    'border-radius:8px;padding:14px 22px;font-size:12px;line-height:1.9;max-height:75vh;overflow:auto;cursor:pointer';
+  div.innerHTML = `<b style="color:${passAll ? '#80ffb0' : '#ff8060'};font-size:13px">EXPLORER SELF TEST: ${passAll ? 'ALL PASS' : 'FAIL'}` +
+    ` (${out.filter(o => o.pass).length}/${out.length})</b><br>` +
+    out.map(o => `<span style="color:${o.pass ? '#70c090' : '#ff8060'}">${o.pass ? '✓' : '✗'} ${o.name}</span>`).join('<br>') +
+    '<br><span style="color:#5080a0;font-size:10px">クリックで閉じる</span>';
+  div.onclick = () => div.remove();
+  document.body.appendChild(div);
+  console.table(out.map(o => ({ test: o.name, pass: o.pass })));
+  return out;
+}
+if (location.search.includes('selftest')) setTimeout(runSimSelfTest, 500);
+window.__sim.runSelfTest = runSimSelfTest;
+
+// ── スワーム行動パラメータ（orchestratorから mission_start で設定）──
+let missionParams = {
+  commRange:        20.0,   // 領域4倍化に合わせ手動モード既定を15→20（ミッション時は策定AIが上書き）
+  returnThreshold:  0.30,
+  cellSize:         GRID_CELL,
+  nx: GRID_NX, nz: GRID_NZ,     // 探査領域 100×60ユニット（実寸1,000m×600m・2026-07-20大型化）
+  halfNz: GRID_HALF_NZ,
+  scanRadius: { sensor: 2, mover: 1, sweeper: 1, mobile_relay: 1, builder: 0 },
+};
+
+// ── 通信ネットワーク管理 ──────────────────────────────────────────
+let _swarmPhysicsTick = 0;
+let _commLinks     = [];   // [{from, to, isolated}]
+let commLinesGroup = new THREE.Group();
+scene.add(commLinesGroup);
+
+function updateSwarmComms() {
+  const { commRange, cellSize, nx, nz, halfNz, scanRadius } = missionParams;
+
+  // 1. ローカルマップ更新（各ロボットの位置に応じてスキャン）
+  for (const robot of robots) {
+    const ud = robot.userData;
+    if (ud.inactive || ud.returned) continue;
+    if (!ud.localMap) ud.localMap = new Set();
+    const aType  = ud.agentType || 'mover';
+    const radius = scanRadius[aType] ?? 0;
+    const cx = Math.max(0, Math.min(nx-1, Math.floor(robot.position.x / cellSize)));
+    const cz = Math.max(0, Math.min(nz-1, Math.floor(robot.position.z / cellSize) + halfNz));
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        const nx2 = cx+dx, nz2 = cz+dz;
+        if (nx2 >= 0 && nx2 < nx && nz2 >= 0 && nz2 < nz)
+          ud.localMap.add(`${nx2},${nz2}`);
+      }
+    }
+  }
+
+  // 2. 隣接グラフ構築
+  const n   = robots.length;
+  const adj = robots.map(() => []);
+  const links = [];
+  for (let i = 0; i < n; i++) {
+    if (robots[i].userData.inactive || robots[i].userData.returned) continue;
+    for (let j = i+1; j < n; j++) {
+      if (robots[j].userData.inactive || robots[j].userData.returned) continue;
+      const d = robots[i].position.distanceTo(robots[j].position);
+      if (d <= commRange) { adj[i].push(j); adj[j].push(i); links.push({i,j}); }
+    }
+  }
+
+  // 3. BFS: 基地（天窓直下の回収地点）から接続チェック
+  const connected = new Set();
+  const queue = [];
+  for (let i = 0; i < n; i++) {
+    if (!robots[i].userData.inactive &&
+        Math.hypot(robots[i].position.x - SKY_X, robots[i].position.z) <= commRange) {
+      connected.add(i); queue.push(i);
+    }
+  }
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const nb of adj[cur]) {
+      if (!connected.has(nb)) { connected.add(nb); queue.push(nb); }
+    }
+  }
+
+  // 4. マップ共有・孤立フラグ更新
+  // 接続コンポーネント全体でlocalMapをunionしてsharedMapを作成
+  const connectedMerged = new Set();
+  for (const i of connected) {
+    for (const cell of (robots[i].userData.localMap ?? [])) connectedMerged.add(cell);
+  }
+  for (let i = 0; i < n; i++) {
+    const r = robots[i];
+    r.userData.isolated = !connected.has(i) && !r.userData.inactive && !r.userData.returned;
+    if (connected.has(i)) {
+      r.userData.sharedMap = connectedMerged;
+    }
+  }
+
+  // 5. 通信リンク可視化（大規模時は各機の最近傍2本に間引き — 接続グラフ自体は全リンク維持）
+  _commLinks = links.map(({i,j}) => ({
+    from: i, to: j,
+    isolated: !connected.has(i) || !connected.has(j),
+  }));
+  let drawLinks = _commLinks;
+  if (n > 12) {
+    const byDist = robots.map(() => []);
+    for (const { i, j } of links) {
+      const d = robots[i].position.distanceTo(robots[j].position);
+      byDist[i].push({ o: j, d }); byDist[j].push({ o: i, d });
+    }
+    const keep = new Set();
+    for (let i = 0; i < n; i++) {
+      byDist[i].sort((a, b) => a.d - b.d);
+      for (const { o } of byDist[i].slice(0, 2)) keep.add(`${Math.min(i, o)}-${Math.max(i, o)}`);
+    }
+    drawLinks = _commLinks.filter(({ from, to }) => keep.has(`${Math.min(from, to)}-${Math.max(from, to)}`));
+  }
+  while (commLinesGroup.children.length) commLinesGroup.remove(commLinesGroup.children[0]);
+  const drawn = new Set();
+  for (const {from, to, isolated} of drawLinks) {
+    const key = `${Math.min(from,to)}-${Math.max(from,to)}`;
+    if (drawn.has(key)) continue;
+    drawn.add(key);
+    // 線を機体上方に浮かせて床・溶岩と重ならないようにする（視認性）
+    const pts = [robots[from].position.clone().setY(robots[from].position.y + 0.55),
+                 robots[to].position.clone().setY(robots[to].position.y + 0.55)];
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({
+      color: isolated ? 0xff3300 : 0x00ff88,
+      opacity: 0.9, transparent: true,
+    });
+    commLinesGroup.add(new THREE.Line(geo, mat));
+  }
+
+  // 孤立機マーカー: 通信が切れている機体の頭上に赤リングを表示
+  // （リンク線は「繋がっている時」しか描けないため、切断状態はこちらで可視化）
+  const ringGeo = new THREE.TorusGeometry(0.55, 0.05, 6, 24);
+  for (let i = 0; i < n; i++) {
+    const ud = robots[i].userData;
+    if (!ud.isolated || ud.inactive || ud.returned) continue;
+    const ring = new THREE.Mesh(ringGeo,
+      new THREE.MeshBasicMaterial({ color: 0xff3300, transparent: true, opacity: 0.85 }));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(robots[i].position).y += 1.1;
+    commLinesGroup.add(ring);
+  }
+}
+
+// ── フロンティアターゲット計算 ──────────────────────────────────
+function computeFrontierTarget(robot, aType, robotIdx) {
+  const { cellSize, nx, nz, halfNz } = missionParams;
+  const localMap  = robot.userData.localMap  ?? new Set();
+  const rawShared = robot.userData.sharedMap ?? new Set();
+  // 孤立中 or sharedMapが空(初期状態)の場合はlocalMapをフォールバックに使う
+  const sharedMap = (robot.userData.isolated || rawShared.size === 0) ? localMap : rawShared;
+  const cx = Math.max(0, Math.min(nx-1, Math.floor(robot.position.x / cellSize)));
+  const cz = Math.max(0, Math.min(nz-1, Math.floor(robot.position.z / cellSize) + halfNz));
+
+  // Z方向分散: 群れ編成時は各群の担当セクター（zHome）±1を基準に、
+  // 単独/少数時は従来どおり robotIdx でチューブ幅を巡回
+  const ud0 = robot.userData;
+  const zBias = (ud0.squadId != null && robots.length > 8)
+    ? Math.max(-halfNz, Math.min(halfNz, Math.round(ud0.zHome / cellSize) + (robotIdx % 3) - 1))
+    : ((robotIdx * 2) % nz) - halfNz;  // -7..+7 (全Z幅をカバー)
+
+  // Z列ごとの探索済みセル数を全タイプで事前集計（端部ボーナス計算に使用）
+  const zColCount = new Int32Array(nz);
+  for (const cell of sharedMap) {
+    const comma = cell.indexOf(',');
+    zColCount[parseInt(cell.slice(comma + 1))]++;
+  }
+  const exploredTotal = sharedMap.size;
+  const coverageRatio = exploredTotal / (nx * nz);  // 現在の探索割合
+
+  let best = null, bestScore = -Infinity;
+  for (let x = 0; x < nx; x++) {
+    for (let z = 0; z < nz; z++) {
+      if (sharedMap.has(`${x},${z}`)) continue;
+      // 溶岩壁で完全に埋まったセルは到達不能なので目標にしない（隣接スキャンで探索される）
+      if (envMode === 'lateral') {
+        const wx0 = x * cellSize, wz0 = (z - halfNz) * cellSize;
+        let allTall = true;
+        for (const ix of [wx0, wx0 + 1]) {
+          for (const iz of [wz0, wz0 + 1]) {
+            if ((lavaHeights.get(ix + ',' + iz) ?? 0) <= CLIMB_MAX) allTall = false;
+          }
+        }
+        if (allTall) continue;
+      }
+      const dist = Math.sqrt((cx-x)**2 + (cz-z)**2);
+      let score;
+      if (aType === 'sweeper') {
+        // Z方向カバレッジ優先: 探索の少ないZ列を徹底的に埋める
+        const zUnexplored = 1.0 - zColCount[z] / nx;
+        // 高探索率になったらX方向ウェイトを下げてZ端部を優先
+        const xWeight = coverageRatio > 0.85 ? 0.2 : 0.5;
+        score = zUnexplored * 5.0 + x * xWeight - dist * 0.4;
+      } else {
+        // mover/sensor: 深度優先 + 強化されたZ分散バイアス
+        const depthW = aType === 'sensor' ? 1.0 : 2.5;
+        // biasWを0.5に強化（0.2では端部Z列への引力が弱すぎた）
+        const biasW  = -Math.abs(z - halfNz - zBias) * 0.5;
+        // 高探索率時の端部ボーナス: まだ探索が少ないZ列を優先
+        const zEdgeBonus = coverageRatio > 0.80
+          ? (1.0 - zColCount[z] / nx) * 3.0
+          : 0.0;
+        score = x * depthW - dist * 0.4 + biasW + zEdgeBonus;
+      }
+      if (score > bestScore) { bestScore = score; best = {x, z}; }
+    }
+  }
+
+  if (!best) return null;
+  return {
+    x: (best.x + 0.5) * cellSize,
+    z: (best.z - halfNz + 0.5) * cellSize,
+  };
+}
+
+// ── Physics Update (setInterval - works in background tabs) ───
+let lastTime = performance.now();
+
+function physicsUpdate() {
+  const now = performance.now();
+  const dt = Math.min((now - lastTime) / 1000, 0.15);
+  lastTime = now;
+
+  _swarmPhysicsTick++;
+  if (movingMode && _swarmPhysicsTick % 30 === 0) updateSwarmComms();
+
+  // ── ローカルマップを毎ティック更新（フロンティア計算の即時反映）──
+  if (movingMode) {
+    const { cellSize, nx, nz, halfNz, scanRadius } = missionParams;
+    for (const robot of robots) {
+      const ud2 = robot.userData;
+      if (ud2.inactive || ud2.returned) continue;
+      if (!ud2.localMap) ud2.localMap = new Set();
+      const aType2 = ud2.agentType || 'mover';
+      const r2 = scanRadius[aType2] ?? 0;
+      const cx2 = Math.max(0, Math.min(nx-1, Math.floor(robot.position.x / cellSize)));
+      const cz2 = Math.max(0, Math.min(nz-1, Math.floor(robot.position.z / cellSize) + halfNz));
+      for (let ddx = -r2; ddx <= r2; ddx++) {
+        for (let ddz = -r2; ddz <= r2; ddz++) {
+          const nx3 = cx2+ddx, nz3 = cz2+ddz;
+          if (nx3 >= 0 && nx3 < nx && nz3 >= 0 && nz3 < nz)
+            ud2.localMap.add(`${nx3},${nz3}`);
+        }
+      }
+    }
+  }
+
+  const fwSpeedFactor = parseFloat(document.getElementById('fw-speed').value) / 100;
+  const moveSpeed = parseFloat(document.getElementById('move-speed').value) / 100;
+  const rollSpeed = Math.PI * (1.0 + moveSpeed * 2.0); // rad/sec
+
+  robots.forEach((robot, idx) => {
+    const ud = robot.userData;
+    const rs = ud.rollState;
+
+    // ── Flywheel spin — physics-based omega ─────────────────
+    // Each FW normally spins at baseOmega (× axis ratio).
+    // During a roll, the active FW follows the momentum-brake profile
+    // (ROLL_PROFILE.wf): spin-up (1→3) → 急ブレーキ(→0) → 惰性0.
+    //   ΔL_flywheel = -ΔL_body  (angular momentum conservation)
+    //   fwSign が回転方向（前/後・左/右で逆スピン）
+    const baseOmega = 4 + fwSpeedFactor * 12;
+    const active = rs?.activeFW;
+    const progress = rs?.progress ?? 0;
+    const fwSign  = rs?.fwSign  ?? 0;
+    const pulse   = Math.sin(Math.PI * progress);
+
+    // Relative omega for active FW (normalized to base)
+    let rollRel = 1.0;
+    if (rs) {
+      rollRel = progress < SPINUP_FRAC
+        ? 1 + 2 * (progress / SPINUP_FRAC)                                   // スピンアップ 1→3
+        : 3 * rollShape((progress - SPINUP_FRAC) / (1 - SPINUP_FRAC), ROLL_PROFILE.wf); // ブレーキ 3→0
+      rollRel *= (fwSign || 1);
+    }
+    const relOmX = active === 'x' ? rollRel : 1.0;
+    const relOmZ = active === 'z' ? rollRel : 0.85;
+    const relOmY = 0.65; // Y-FW is steady (yaw not yet implemented)
+
+    ud.fwAngle.x += dt * baseOmega * relOmX;
+    ud.fwAngle.y += dt * baseOmega * relOmY;
+    ud.fwAngle.z += dt * baseOmega * relOmZ;
+    ud.fwX_spinner.rotation.x = ud.fwAngle.x;
+    ud.fwY_spinner.rotation.y = ud.fwAngle.y;
+    ud.fwZ_spinner.rotation.z = ud.fwAngle.z;
+
+    // ── Active flywheel highlight ────────────────────────────
+    // Emissive ∝ |ω| so deceleration (approaching 0) dims the ring
+    ud.fw_x.material.emissiveIntensity = active === 'x' ? (0.4 + 2.2 * Math.abs(relOmX)) : 0.3;
+    ud.fw_y.material.emissiveIntensity = 0.3;
+    ud.fw_z.material.emissiveIntensity = active === 'z' ? (0.4 + 2.2 * Math.abs(relOmZ)) : 0.3;
+    ud.glow.intensity = active ? (1.8 + 2.2 * pulse) : 1.5;
+
+    // ── 立ち上げ準備・立ち上げ中: Z軸FWがトルクを生成 ──────────
+    if (structureMode && (towerPhase === 'lined_up' || towerPhase === 'raising')) {
+      const raisePulse = Math.sin(Math.PI * towerRaiseProgress);
+      ud.fwAngle.z += dt * baseOmega * (2.5 + raisePulse * 4.0); // 強制追加スピン
+      ud.fw_z.material.emissiveIntensity = 0.5 + 4.0 * raisePulse;
+      ud.glow.intensity = 1.5 + 4.0 * raisePulse;
+    }
+
+    // ── Movement logic ───────────────────────────────────────
+    if (structureMode) {
+      const target = structureTargets[idx];
+      if (!target) { /* skip */ } else if (structureTargets.length >= 3) {
+        // ── Phase 3: 横一列 → フライホイールトルクで垂直タワー ──
+        if (towerPhase === 'lining_up') {
+          // Step A: 全機が x=i, z=0 に横一列ロール移動
+          if (!ud.rollState) rollTowardTarget(robot, target);
+          if (ud.rollState) updateRoll(robot, dt, rollSpeed);
+
+          // 最後のロボットのイテレーションで全機完了チェック
+          if (idx === robots.length - 1) {
+            const allDocked = robots.every((r, i) => {
+              const t = structureTargets[i];
+              return !r.userData.rollState
+                  && Math.abs(r.position.x - t.x) < 0.15
+                  && Math.abs(r.position.z - t.z) < 0.15;
+            });
+            if (allDocked) {
+              // 位置・姿勢をスナップして一時停止フェーズへ（横並びを見せる）
+              robots.forEach((r, i) => {
+                r.userData.rollState = null;
+                r.position.set(structureTargets[i].x, HS, structureTargets[i].z);
+                r.quaternion.identity();
+              });
+              towerPhase = 'lined_up';
+              towerLinedUpTime = now;
+            }
+          }
+
+        } else if (towerPhase === 'lined_up') {
+          // 横並び完了後、0.7秒静止してから立ち上げ開始
+          if (idx === 0 && now - towerLinedUpTime > 700) {
+            towerPhase = 'raising';
+            towerRaiseProgress = 0;
+            towerRaisingStartTime = now;
+            towerPivot = new THREE.Vector3(structureTargets[0].x, HS, structureTargets[0].z);
+            towerRobotInitPositions = robots.map(r => r.position.clone());
+          }
+
+        } else if (towerPhase === 'raising') {
+          // Step B: Z軸回りに列を+PI/2回転 → 垂直タワー
+          // pivot = R0の中心（x=0, y=HS, z=0）
+          if (idx === 0) {
+            // 経過実時間ベース（2.2秒固定）— dt累積だとwarmタブで早く終わる問題を防ぐ
+            towerRaiseProgress = Math.min((now - towerRaisingStartTime) / 2200, 1.0);
+          }
+          const tp = towerRaiseProgress;
+          // cubic ease-in-out
+          const eased = tp < 0.5 ? 4*tp*tp*tp : 1 - Math.pow(-2*tp + 2, 3) / 2;
+          const theta = eased * Math.PI / 2;
+
+          const initPos = towerRobotInitPositions[idx];
+          const relX = initPos.x - towerPivot.x; // = idx (相対距離)
+          const relY = initPos.y - towerPivot.y; // ≈ 0
+          robot.position.set(
+            towerPivot.x + relX * Math.cos(theta) - relY * Math.sin(theta),
+            towerPivot.y + relX * Math.sin(theta) + relY * Math.cos(theta),
+            towerPivot.z
+          );
+          robot.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), theta);
+
+          if (idx === 0 && towerRaiseProgress >= 1.0) towerPhase = 'done';
+
+        }
+        // 'done': 静止（positionはそのまま）
+
+      } else {
+        // Phase 2: XZ平面フォーメーション（従来動作）
+        if (!ud.rollState) rollTowardTarget(robot, target);
+        if (ud.rollState) updateRoll(robot, dt, rollSpeed);
+      }
+
+    } else if (movingMode) {
+      const aType = ud.agentType || 'mover';
+
+      // ── バッテリー消費（手動モードのみ。AIミッション中はエージェントが管理）──
+      // 探索機は探索中に消耗し、天窓の回収地点に戻ると充電されて再出動する。
+      if (performance.now() - _lastAgentBatteryTime > 3000) {
+        if (ud.battery === undefined) ud.battery = 1.0;
+        if (ud.returned) {
+          // 回収地点で充電 → 満充電で再出動
+          ud.battery = Math.min(1.0, ud.battery + dt / 4);
+          if (ud.battery >= 1.0) { ud.returning = false; ud.returned = false; }
+        } else if (!ud.isAnchor) {
+          ud.battery = Math.max(0, ud.battery - dt / MANUAL_BATTERY_DRAIN_S);
+        }
+      }
+
+      if (aType === 'builder') {
+        // ── Builder型: 固定アンカー位置へ移動して停止 ──────────
+        if (ud.isAnchor) {
+          ud.fw_z.material.emissiveIntensity = 0.6 + 0.3 * Math.sin(now / 600);
+          ud.glow.intensity = 2.0 + Math.sin(now / 600) * 0.5;
+        } else if (ud.anchorTarget) {
+          const tgt = { x: ud.anchorTarget[0], z: ud.anchorTarget[2] };
+          if (!ud.rollState) rollTowardTarget(robot, tgt);
+          if (ud.rollState) updateRoll(robot, dt, rollSpeed);
+          if (!ud.rollState) {
+            const dx = Math.abs(robot.position.x - tgt.x);
+            const dz = Math.abs(robot.position.z - tgt.z);
+            if (dx < 0.7 && dz < 0.7) {
+              ud.isAnchor = true;
+              robot.position.x = Math.round(robot.position.x);
+              robot.position.z = Math.round(robot.position.z);
+              anchoredRobotIds = [...new Set([...anchoredRobotIds, idx])];
+              updateRelayChainVisual();
+            }
+          }
+        }
+
+      } else if (aType === 'mobile_relay') {
+        // ── モバイル中継型: 探索前線を追いかけて動的にリレー ───
+        if (ud.returned) {
+          // 帰還完了: 待機
+        } else if (ud.returning) {
+          if (!ud.rollState) rollTowardTarget(robot, { x: 0, z: 0 }, true);
+          if (ud.rollState) updateRoll(robot, dt, rollSpeed * 1.2);
+          if (robot.position.x <= 1.0 && !ud.rollState) {
+            ud.returned = true;
+            robot.position.x = 0.5;
+          }
+        } else if ((ud.battery ?? 1.0) <= missionParams.returnThreshold) {
+          ud.returning = true;
+        } else if (ud.dynamicTarget) {
+          const dx = Math.abs(robot.position.x - ud.dynamicTarget.x);
+          const dz = Math.abs(robot.position.z - ud.dynamicTarget.z);
+          if (dx > 1.0 || dz > 1.0) {
+            if (!ud.rollState) rollTowardTarget(robot, ud.dynamicTarget);
+            if (ud.rollState) updateRoll(robot, dt, rollSpeed);
+          } else {
+            // 目標位置付近で待機しながら通信維持（シアン発光）
+            ud.fw_z.material.emissiveIntensity = 0.4 + 0.2 * Math.sin(now / 700);
+            ud.glow.intensity = 1.2 + Math.sin(now / 700) * 0.3;
+          }
+        }
+
+      } else {
+        // ── Explorer型: フロンティア探索 (mover / sweeper / sensor) ─
+        if (ud.returned) {
+          // 帰還完了: 待機
+        } else if (ud.returning) {
+          // 帰還中: 天窓直下（回収地点）に向かう（他機衝突は無視・地形は遵守）
+          if (!ud.rollState) rollTowardTarget(robot, { x: SKY_X, z: 0 }, true);
+          if (ud.rollState) updateRoll(robot, dt, rollSpeed * 1.2);
+          if (!ud.rollState &&
+              Math.abs(robot.position.x - SKY_X) <= 1.5 && Math.abs(robot.position.z) <= 1.5) {
+            ud.returned = true;
+          }
+        } else if ((ud.battery ?? 1.0) <= missionParams.returnThreshold) {
+          // バッテリー帰還閾値以下 → 帰還開始
+          ud.returning = true;
+          ud.frontierTarget = null;
+        } else {
+          // 探索中: フロンティアターゲットへ
+          if (!ud.frontierTarget || _swarmPhysicsTick % 45 === idx % 45) {
+            ud.frontierTarget = computeFrontierTarget(robot, aType, idx);
+          }
+          if (ud.frontierTarget) {
+            if (!ud.rollState) rollTowardTarget(robot, ud.frontierTarget);
+            const spd = aType === 'sensor' ? 0.75 : 1.25;
+            if (ud.rollState) updateRoll(robot, dt, rollSpeed * spd);
+            // ターゲット到達チェック
+            if (!ud.rollState) {
+              const dx = Math.abs(robot.position.x - ud.frontierTarget.x);
+              const dz = Math.abs(robot.position.z - ud.frontierTarget.z);
+              if (dx < 1.0 && dz < 1.0) ud.frontierTarget = null;
+            }
+          }
+        }
+      }
+
+    } else {
+      // Idle: gentle float（溶岩地形の床高さを基準に）
+      const floorY = heightAt(Math.round(robot.position.x), Math.round(robot.position.z));
+      robot.position.y = floorY + HS + Math.sin(now / 1000 + ud.idlePhase) * 0.06;
+    }
+  });
+}
+
+// ── Render Loop ───────────────────────────────────────────────
+function updateBatteryBars() {
+  const thr = missionParams.returnThreshold ?? 0.3;
+  for (const r of robots) {
+    const bar = r.userData.batBar;
+    if (!bar) continue;
+    const ud = r.userData;
+    const show = movingMode && !ud.inactive;
+    bar.pivot.visible = show;
+    if (!show) continue;
+    const b = Math.max(0, Math.min(1, ud.battery ?? 1.0));
+    // 位置: 機体の上方。camera向きにビルボード
+    bar.pivot.position.set(r.position.x, r.position.y + HS + 0.75, r.position.z);
+    bar.pivot.quaternion.copy(camera.quaternion);
+    // 残量フィル（左端アンカー）
+    bar.fill.scale.x = Math.max(0.001, b);
+    // 色: 十分→緑 / 帰還閾値付近→黄 / 閾値以下→赤
+    const col = b > 0.5 ? 0x33dd55 : (b > thr ? 0xffcc22 : 0xff3322);
+    bar.fill.material.color.setHex(col);
+  }
+}
+
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  controls.update();
+  updateDockRings(performance.now());
+  updateBatteryBars();
+  renderer.render(scene, camera);
+}
+
+setInterval(physicsUpdate, 16);
+renderLoop();
+
+// ── UI ────────────────────────────────────────────────────────
+// 群れスライダー → 合計を隠しrobot-countへ反映（AIミッションはrobot-countを直接叩く）
+function syncSquadUI() {
+  const sc = parseInt(document.getElementById('squad-count').value);
+  const ss = parseInt(document.getElementById('squad-size').value);
+  desiredSquads = sc;
+  document.getElementById('squad-count-label').textContent = sc;
+  document.getElementById('squad-size-label').textContent = ss;
+  const rc = document.getElementById('robot-count');
+  rc.value = sc * ss;
+  rc.dispatchEvent(new Event('input'));
+}
+document.getElementById('squad-count').addEventListener('input', syncSquadUI);
+document.getElementById('squad-size').addEventListener('input', syncSquadUI);
+
+document.getElementById('robot-count').addEventListener('input', e => {
+  const n = parseInt(e.target.value);
+  document.getElementById('robot-count-label').textContent = n;
+  towerPhase = 'lining_up'; towerRaiseProgress = 0; towerPivot = null; towerRobotInitPositions = []; towerLinedUpTime = 0; towerRaisingStartTime = 0;
+  spawnRobots(n);
+  if (structureMode) structureTargets = computeStructureTargets(n);
+  updatePhaseUI(n);
+  window.__redrawCaveMap?.();   // 編成変更時も探査マップをクリア
+});
+
+document.getElementById('btn-move').addEventListener('click', function () {
+  movingMode = !movingMode;
+  structureMode = false;
+  document.getElementById('btn-structure').classList.remove('active');
+  this.classList.toggle('active', movingMode);
+  robots.forEach((r, i) => {
+    r.userData.rollState = null;
+    r.position.y = heightAt(Math.round(r.position.x), Math.round(r.position.z)) + HS;
+    r.quaternion.identity();
+    if (movingMode) {
+      r.userData.nextRollTime = performance.now() + i * 150;
+      r.userData.patternIdx = 0;
+    }
+  });
+});
+
+document.getElementById('btn-structure').addEventListener('click', function () {
+  structureMode = !structureMode;
+  movingMode = false;
+  document.getElementById('btn-move').classList.remove('active');
+  this.classList.toggle('active', structureMode);
+  towerPhase = 'lining_up'; towerRaiseProgress = 0; towerPivot = null; towerRobotInitPositions = []; towerLinedUpTime = 0; towerRaisingStartTime = 0;
+  if (structureMode) {
+    structureTargets = computeStructureTargets(robots.length);
+    robots.forEach(r => { r.quaternion.identity(); r.userData.rollState = null; });
+  } else {
+    robots.forEach(r => { r.userData.rollState = null; r.position.y = heightAt(Math.round(r.position.x), Math.round(r.position.z)) + HS; r.quaternion.identity(); });
+    dockRings.forEach(r => { r.visible = false; r.material.opacity = 0; });
+  }
+  updatePhaseUI(robots.length);
+});
+
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  movingMode = structureMode = false;
+  document.getElementById('btn-move').classList.remove('active');
+  document.getElementById('btn-structure').classList.remove('active');
+  towerPhase = 'lining_up'; towerRaiseProgress = 0; towerPivot = null; towerRobotInitPositions = []; towerLinedUpTime = 0; towerRaisingStartTime = 0;
+  const n = robots.length;
+  spawnRobots(n);
+  window.__redrawCaveMap?.();   // 探査マップを即時クリア
+  // リセット＝全リセット: 実行中のAIミッションも停止（マップ塗り戻しの根本原因）
+  // ※ミッション開始時のプログラム的リセット（mission_start）では停止しない
+  if (!window.__missionResetting) fetch('/api/stop', { method: 'POST' }).catch(() => {});
+});
+
+function updatePhaseUI(count) {
+  const isTower = structureMode && count >= 3;
+  document.getElementById('ph1').className = 'phase-item' + (count === 1 && !movingMode && !structureMode ? ' active' : ' done');
+  document.getElementById('ph2').className = 'phase-item' + (count >= 2 && !isTower ? ' active' : isTower ? ' done' : '');
+  document.getElementById('ph3').className = 'phase-item' + (isTower ? ' active' : '');
+  document.getElementById('ph4').className = 'phase-item';
+  document.getElementById('btn-structure').textContent =
+    count >= 3 ? '構造物形成モード（タワー）' : '構造物形成モード';
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── 視点プリセット ───────────────────────────────────────────────
+const VIEW_PRESETS = {
+  overview: { pos: [50, 32, 68], tgt: [50, 0,  0] },  // R: チューブ全体俯瞰
+  entrance: { pos: [ 3,  6, 14], tgt: [ 6, 0,  0] },  // E: 入口（天窓）アップ
+  top:      { pos: [50, 95,  1], tgt: [50, 0,  0] },  // T: 真上から
+  deep:     { pos: [94, 10, 26], tgt: [96, 0,  0] },  // D: 奥部
+};
+
+window.setView = function(name) {
+  const p = VIEW_PRESETS[name];
+  if (!p) return;
+  camera.position.set(...p.pos);
+  controls.target.set(...p.tgt);
+  controls.update();
+};
+
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  switch (e.key.toLowerCase()) {
+    case 'r': setView('overview'); break;
+    case 'e': setView('entrance'); break;
+    case 't': setView('top');      break;
+    case 'd': setView('deep');     break;
+  }
+});
+
+// ─── AIエージェント連携（WebSocket）────────────────────────────
+(function() {
+  const WS_URL = 'ws://localhost:8765';
+  const SEND_INTERVAL_MS = 1000;
+  let ws = null;
+  let hudEl = null;
+
+  function createHUD() {
+    hudEl = document.createElement('div');
+    hudEl.id = 'agent-hud';
+    hudEl.style.cssText = [
+      'position:fixed', 'bottom:20px', 'right:20px', 'z-index:20',
+      'background:rgba(10,10,20,0.88)', 'border:1px solid #1e3a5f',
+      'border-radius:8px', 'padding:12px 16px', 'font-size:11px',
+      'min-width:200px', 'line-height:1.8', 'color:#8090a0'
+    ].join(';');
+    hudEl.innerHTML = `
+      <div style="color:#60a0ff;font-weight:600;margin-bottom:6px">▶ AI AGENT SYSTEM</div>
+      <div id="hud-status">待機中...</div>
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <button id="hud-btn-start" onclick="hudStartAgent()" style="
+          flex:1;padding:4px 0;background:#0d3a1a;color:#40e080;border:1px solid #1a6030;
+          border-radius:4px;font-size:10px;cursor:pointer">▶ 起動</button>
+        <button id="hud-btn-stop" onclick="hudStopAgent()" style="
+          flex:1;padding:4px 0;background:#2a0a0a;color:#e06040;border:1px solid #601a1a;
+          border-radius:4px;font-size:10px;cursor:pointer">■ 停止</button>
+      </div>`;
+    document.body.appendChild(hudEl);
+  }
+
+  window.hudStartAgent = async function() {
+    const btn = document.getElementById('hud-btn-start');
+    if (btn) { btn.textContent = '起動中...'; btn.disabled = true; }
+    try {
+      // UIの編成（群れの数×1群の機数＝robot-count合計）をミッションに引き渡す
+      const total = parseInt(document.getElementById('robot-count').value) || 8;
+      const res = await fetch('/api/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ robot_count: total }),
+      });
+      const json = await res.json();
+      setHUDStatus(`<span style="color:${json.ok ? '#40e080' : '#e0a040'}">${json.message}</span>`);
+    } catch (e) {
+      setHUDStatus('<span style="color:#e06040">起動失敗（launcher.py が必要です）</span>');
+    } finally {
+      if (btn) { btn.textContent = '▶ 起動'; btn.disabled = false; }
+    }
+  };
+
+  window.hudStopAgent = async function() {
+    const btn = document.getElementById('hud-btn-stop');
+    if (btn) { btn.textContent = '停止中...'; btn.disabled = true; }
+    try {
+      const res = await fetch('/api/stop', { method: 'POST' });
+      const json = await res.json();
+      setHUDStatus(`<span style="color:#e0a040">${json.message}</span>`);
+    } catch (e) {
+      setHUDStatus('<span style="color:#e06040">停止失敗</span>');
+    } finally {
+      if (btn) { btn.textContent = '■ 停止'; btn.disabled = false; }
+    }
+  };
+
+  function setHUDStatus(html) {
+    const el = document.getElementById('hud-status');
+    if (el) el.innerHTML = html;
+  }
+
+  function getRobotStates() {
+    const isolatedCount = robots.filter(r =>
+      r.userData.isolated && !r.userData.inactive && !r.userData.returned).length;
+    const returnedCount = robots.filter(r => r.userData.returned).length;
+    return {
+      robots: robots.map((r, i) => ({
+        id:        i,
+        type:      r.userData.agentType || 'mover',
+        position:  [r.position.x, r.position.y, r.position.z],
+        battery:   r.userData.battery !== undefined ? r.userData.battery : 1.0,
+        active:    !r.userData.inactive,
+        returning: r.userData.returning || false,
+        isolated:  r.userData.isolated  || false,
+      })),
+      isolated_count: isolatedCount,
+      returned_count: returnedCount,
+      total_moves:    totalMoves,
+    };
+  }
+
+  // ── 2D 洞窟マップ描画 ────────────────────────────────────────────
+  const _mapCanvas  = document.getElementById('cave-map');
+  const _mapCtx     = _mapCanvas ? _mapCanvas.getContext('2d') : null;
+
+  function drawCaveMap(data) {
+    if (!_mapCtx) return;
+    const W = _mapCanvas.width, H = _mapCanvas.height;
+    const NX = data.nx || 25, NZ = data.nz || 15;
+    const CW = W / NX, CH = H / NZ;
+    const cellsByType = data.cells_by_type || {};
+    const robots = data.robots || [];
+
+    // 洞窟背景（未探索）
+    _mapCtx.fillStyle = '#080f1a';
+    _mapCtx.fillRect(0, 0, W, H);
+
+    // グリッド線（薄め）
+    _mapCtx.strokeStyle = 'rgba(30,60,100,0.35)';
+    _mapCtx.lineWidth   = 0.5;
+    for (let x = 0; x <= NX; x++) {
+      _mapCtx.beginPath();
+      _mapCtx.moveTo(x * CW, 0);
+      _mapCtx.lineTo(x * CW, H);
+      _mapCtx.stroke();
+    }
+    for (let z = 0; z <= NZ; z++) {
+      _mapCtx.beginPath();
+      _mapCtx.moveTo(0, z * CH);
+      _mapCtx.lineTo(W, z * CH);
+      _mapCtx.stroke();
+    }
+
+    // 溶岩地形（横穴環境のみ）: 低い溶岩=橙（乗越可）／溶岩壁=暗赤（通行不可）
+    if (envMode === 'lateral') {
+      const cs = data.cell_size || 2;
+      for (const [key, h] of lavaHeights) {
+        const [ox, oz] = key.split(',').map(Number);
+        const cx = Math.floor(ox / cs), cz = Math.floor((oz + 15) / cs);
+        if (cx < 0 || cx >= NX || cz < 0 || cz >= NZ) continue;
+        _mapCtx.fillStyle = h <= CLIMB_MAX ? 'rgba(220, 130, 30, 0.55)' : 'rgba(170, 50, 40, 0.8)';
+        _mapCtx.fillRect(cx * CW + 0.5, cz * CH + 0.5, CW - 1, CH - 1);
+      }
+    }
+
+    // 洞窟境界（外枠）
+    _mapCtx.strokeStyle = '#2a5080';
+    _mapCtx.lineWidth   = 2;
+    _mapCtx.strokeRect(1, 1, W - 2, H - 2);
+
+    // X軸ラベル（深度目盛り）
+    _mapCtx.fillStyle = 'rgba(60,100,150,0.8)';
+    _mapCtx.font      = '8px sans-serif';
+    for (let x = 0; x <= NX; x += 5) {
+      const label = `${x * (data.cell_size || 2) * 10}m`;
+      _mapCtx.fillText(label, x * CW + 1, H - 1);
+    }
+
+    // ムーバー探索済みセル（暗い青）
+    _mapCtx.fillStyle = 'rgba(30, 90, 170, 0.55)';
+    for (const [cx, cz] of (cellsByType.mover || [])) {
+      if (cx >= 0 && cx < NX && cz >= 0 && cz < NZ)
+        _mapCtx.fillRect(cx * CW + 0.5, cz * CH + 0.5, CW - 1, CH - 1);
+    }
+
+    // スイーパー探索済みセル（マゼンタ系）
+    _mapCtx.fillStyle = 'rgba(200, 60, 200, 0.55)';
+    for (const [cx, cz] of (cellsByType.sweeper || [])) {
+      if (cx >= 0 && cx < NX && cz >= 0 && cz < NZ)
+        _mapCtx.fillRect(cx * CW + 0.5, cz * CH + 0.5, CW - 1, CH - 1);
+    }
+
+    // モバイル中継探索済みセル（シアン系）
+    _mapCtx.fillStyle = 'rgba(0, 180, 180, 0.55)';
+    for (const [cx, cz] of (cellsByType.mobile_relay || [])) {
+      if (cx >= 0 && cx < NX && cz >= 0 && cz < NZ)
+        _mapCtx.fillRect(cx * CW + 0.5, cz * CH + 0.5, CW - 1, CH - 1);
+    }
+
+    // センサー探索済みセル（明るいシアン）
+    _mapCtx.fillStyle = 'rgba(0, 200, 130, 0.72)';
+    for (const [cx, cz] of (cellsByType.sensor || [])) {
+      if (cx >= 0 && cx < NX && cz >= 0 && cz < NZ)
+        _mapCtx.fillRect(cx * CW + 0.5, cz * CH + 0.5, CW - 1, CH - 1);
+    }
+
+    // 最大深度ライン
+    const maxCx = Math.max(0, ...(cellsByType.sensor || []).map(([cx]) => cx),
+                              ...(cellsByType.mover   || []).map(([cx]) => cx),
+                              ...(cellsByType.sweeper || []).map(([cx]) => cx),
+                              ...(cellsByType.mobile_relay || []).map(([cx]) => cx));
+    if (maxCx > 0) {
+      _mapCtx.strokeStyle = 'rgba(0, 255, 160, 0.5)';
+      _mapCtx.lineWidth   = 1.5;
+      _mapCtx.setLineDash([4, 3]);
+      _mapCtx.beginPath();
+      _mapCtx.moveTo((maxCx + 1) * CW, 0);
+      _mapCtx.lineTo((maxCx + 1) * CW, H);
+      _mapCtx.stroke();
+      _mapCtx.setLineDash([]);
+    }
+
+    // ロボット位置
+    const TYPE_DOT_COLORS = { sensor: '#00aaff', mover: '#ff8800', builder: '#44ff44', mobile_relay: '#00ffcc', sweeper: '#ff44ff' };
+    const R_DOT = Math.min(CW, CH) * 0.38;
+    for (const r of robots) {
+      if (!r.active) continue;
+      const cx = (r.position[0] || 0) / (data.cell_size || 2);
+      const cz = (r.position[2] || 0) / (data.cell_size || 2) + NZ / 2;  // z=0→中央
+      const px = (cx + 0.5) * CW, pz = cz * CH;
+      _mapCtx.fillStyle = r.is_anchor ? '#ffff00' : (TYPE_DOT_COLORS[r.type] || '#ffffff');
+      _mapCtx.beginPath();
+      _mapCtx.arc(px, pz, R_DOT, 0, Math.PI * 2);
+      _mapCtx.fill();
+      // アンカーには縦線を描画（中継位置を強調）
+      if (r.is_anchor) {
+        _mapCtx.strokeStyle = 'rgba(255,255,0,0.4)';
+        _mapCtx.lineWidth   = 1;
+        _mapCtx.beginPath();
+        _mapCtx.moveTo(px, 0);
+        _mapCtx.lineTo(px, H);
+        _mapCtx.stroke();
+      }
+    }
+
+    // 統計表示
+    const statsEl = document.getElementById('cave-map-stats');
+    if (statsEl) {
+      const explored = (cellsByType.sensor || []).length + (cellsByType.mover || []).length
+                     + (cellsByType.sweeper || []).length + (cellsByType.mobile_relay || []).length;
+      const depthM   = maxCx * (data.cell_size || 2) * 10;
+      statsEl.textContent = `深度 ${depthM}m / ${NX * (data.cell_size||2) * 10}m | ${explored}/${NX*NZ}セル探索済`;
+    }
+  }
+
+  // ── クライアント側マップ描画（手動モード用） ─────────────────
+  // AIミッション中は update_map コマンドのデータを優先し、
+  // それ以外は各ロボットの localMap（updateSwarmCommsが更新）から描画する。
+  let _lastAgentMapTime = 0;
+  window.__noteAgentMap = () => { _lastAgentMapTime = performance.now(); };
+  // リセット等からの強制再描画（エージェント優先ウィンドウも解除）
+  // 直後2秒は飛行中のupdate_mapフレームを無視して塗り戻しを防ぐ
+  window.__redrawCaveMap = () => {
+    _lastAgentMapTime = 0;
+    window.__mapResetGraceUntil = performance.now() + 2000;
+    drawClientMap();
+  };
+  function drawClientMap() {
+    if (performance.now() - _lastAgentMapTime < 3000) return;  // ミッションデータ優先
+    if (!_mapCtx) return;
+    const byType = {};
+    for (const r of robots) {
+      const t = r.userData.agentType || 'mover';
+      if (!byType[t]) byType[t] = new Set();
+      for (const c of (r.userData.localMap ?? [])) byType[t].add(c);
+    }
+    const cells_by_type = {};
+    for (const [t, set] of Object.entries(byType)) {
+      cells_by_type[t] = [...set].map(k => k.split(',').map(Number));
+    }
+    drawCaveMap({
+      nx: missionParams.nx, nz: missionParams.nz, cell_size: missionParams.cellSize,
+      cells_by_type,
+      robots: robots.map(r => ({
+        active: !r.userData.inactive && !r.userData.returned,
+        position: [r.position.x, r.position.y, r.position.z],
+        type: r.userData.agentType || 'mover',
+        is_anchor: !!r.userData.isAnchor,
+      })),
+    });
+  }
+  setInterval(drawClientMap, 500);
+
+  let _dbgBatLogged = false;
+  function applyRenderCommands(commands) {
+    for (const cmd of commands) {
+      if (cmd.action === 'update_robot') {
+        const r = robots[cmd.robot_id];
+        if (!r) continue;
+        // 機体タイプに応じてボディカラーを変更
+        r.userData.agentType = cmd.type;
+        r.userData.battery = cmd.battery;
+        _lastAgentBatteryTime = performance.now();   // 手動消費を抑止（AI管理を優先）
+        // デバッグ: battery <= threshold時にconsole.log
+        if (cmd.battery <= missionParams.returnThreshold && !_dbgBatLogged) {
+          _dbgBatLogged = true;
+          console.log(`[DBG] THRESHOLD HIT robot${cmd.robot_id} battery=${cmd.battery.toFixed(3)} threshold=${missionParams.returnThreshold} type=${r.userData.agentType} returning=${r.userData.returning} returned=${r.userData.returned} movingMode=<check outside>`);
+        }
+        r.traverse(child => {
+          if (child.isMesh && child.userData.isBody) {
+            child.material.color.setHex(cmd.color);
+          }
+        });
+      } else if (cmd.action === 'update_mobile_relay_target') {
+        const r = robots[cmd.robot_id];
+        if (r) r.userData.dynamicTarget = { x: cmd.target[0], z: cmd.target[2] };
+      } else if (cmd.action === 'update_relay_chain') {
+        anchoredRobotIds = cmd.anchored_ids || [];
+        updateRelayChainVisual();
+        chainLineMat.color.setHex(cmd.chain_gap ? 0xff4444 : 0x00ffaa);
+      } else if (cmd.action === 'update_hud') {
+        const areaPct  = cmd.total_area_m2 ? ((cmd.explored_area_m2 / cmd.total_area_m2) * 100).toFixed(0) : '?';
+        const depthPct = cmd.tube_depth_m  ? ((cmd.max_depth_m / cmd.tube_depth_m) * 100).toFixed(0) : '?';
+        const total    = cmd.total_robots || 1;
+        const isoPct   = ((cmd.isolated_count || 0) / total * 100).toFixed(0);
+        const retPct   = ((cmd.returned_count || 0) / Math.max(total - (cmd.anchors||0), 1) * 100).toFixed(0);
+        const isoCol   = (cmd.isolated_count || 0) > 0 ? '#ff6060' : '#60d060';
+        const retCol   = parseInt(retPct) >= 80 ? '#60ff80' : '#ffcc44';
+        const exCells  = Math.round((cmd.explored_area_m2||0) / 400);
+        const mpc      = exCells > 0 ? (totalMoves / exCells).toFixed(1) : '-';
+        setHUDStatus(
+          `<b style="color:#80c8ff">▶ 探査</b>　` +
+          `${(cmd.explored_area_m2||0).toLocaleString()}m² <span style="color:#406080">(${areaPct}%)</span><br>` +
+          `<b style="color:#80c8ff">▶ 深度</b>　` +
+          `${cmd.max_depth_m||0}m / ${cmd.tube_depth_m||500}m <span style="color:#406080">(${depthPct}%)</span><br>` +
+          `<b style="color:#80c8ff">▶ 通信</b>　` +
+          `孤立 <span style="color:${isoCol};font-weight:600">${cmd.isolated_count||0}台</span> | ` +
+          `リレー ${cmd.anchors||0}基<br>` +
+          `<b style="color:#80c8ff">▶ 帰還</b>　` +
+          `<span style="color:${retCol};font-weight:600">${cmd.returned_count||0}台</span> / ${total}台<br>` +
+          `<b style="color:#80c8ff">▶ 移動</b>　` +
+          `<span id="hud-moves-val" style="font-weight:600">${totalMoves.toLocaleString()}</span> 回 <span style="color:#406080">(${mpc}回/セル)</span>`
+        );
+      } else if (cmd.action === 'update_comm_links') {
+        // 通信リンクは physicsUpdate 内で自前描画しているのでスキップ
+      } else if (cmd.action === 'update_map') {
+        // リセット直後の猶予中は飛行中フレームを無視（塗り戻し防止）
+        if (performance.now() < (window.__mapResetGraceUntil || 0)) continue;
+        window.__noteAgentMap();
+        drawCaveMap(cmd);
+      }
+    }
+  }
+
+  function applyMissionStart(data) {
+    totalMoves = 0;
+    const movesEl = document.getElementById('hud-moves-val');
+    if (movesEl) movesEl.textContent = '0';
+    const params    = data.params    || {};
+    const relayPos  = data.relay_positions || {};
+    const robotCount   = params.robot_count   || 8;
+    const builderCount = params.builder_count || 2;
+
+    // ミッションパラメータをブラウザに反映
+    missionParams.commRange       = params.comm_range       ?? 15.0;
+    missionParams.returnThreshold = params.return_threshold ?? 0.30;
+
+    // ロボット数スライダーを更新してリセット
+    // （ミッション開始由来のリセットで/api/stopを発火させないようフラグで保護）
+    const slider = document.getElementById('robot-count');
+    slider.value = robotCount;
+    slider.dispatchEvent(new Event('input'));
+    window.__missionResetting = true;
+    document.getElementById('btn-reset').click();
+    window.__missionResetting = false;
+
+    setTimeout(() => {
+      // 天窓直下に同心リング配置（縦孔から降ろされた想定）
+      const spawnCells = skylightSpawnCells(robots.length);
+      for (let i = 0; i < robots.length; i++) {
+        const [sx, sz] = spawnCells[i] ?? [SKY_X, 0];
+        robots[i].position.set(sx, 0.5, sz);
+        robots[i].quaternion.identity();
+        robots[i].userData.rollState     = null;
+        robots[i].userData.localMap      = new Set();
+        robots[i].userData.sharedMap     = new Set();
+        robots[i].userData.frontierTarget = null;
+        robots[i].userData.returning     = false;
+        robots[i].userData.returned      = false;
+        robots[i].userData.isolated      = false;
+        robots[i].userData.battery       = 1.0;
+        robots[i].userData.inactive      = false;
+      }
+
+      // タイプ割り当て: builder→mobile_relay、次sweeper_count台→sweeper、残りmover
+      const sweeperCount = params.sweeper_count || 1;
+      anchoredRobotIds = [];
+      updateRelayChainVisual();
+      for (let i = 0; i < robots.length; i++) {
+        if (i < builderCount) {
+          robots[i].userData.agentType    = 'mobile_relay';
+          robots[i].userData.isAnchor     = false;
+          robots[i].userData.anchorTarget = null;
+          robots[i].userData.dynamicTarget = null;
+        } else if (i < builderCount + sweeperCount) {
+          robots[i].userData.agentType    = 'sweeper';
+          robots[i].userData.anchorTarget = null;
+        } else {
+          robots[i].userData.agentType    = 'mover';
+          robots[i].userData.anchorTarget = null;
+        }
+      }
+
+      // 通信リンク初期化
+      while (commLinesGroup.children.length) commLinesGroup.remove(commLinesGroup.children[0]);
+
+      // 移動モード自動開始
+      if (movingMode) document.getElementById('btn-move').click();
+      setTimeout(() => document.getElementById('btn-move').click(), 100);
+
+      const rtPct = Math.round((params.return_threshold ?? 0.3) * 100);
+      setHUDStatus(
+        `<span style="color:#80ffb0;font-weight:600">ミッション${data.mission_num}開始</span><br>` +
+        `通信圏: ${params.comm_range ?? 15}単位 | 帰還閾値: ${rtPct}%<br>` +
+        `中継${builderCount}台(動的) / スイーパー${sweeperCount}台 / 探索${robotCount - builderCount - sweeperCount}台`
+      );
+    }, 120);
+  }
+
+  window.reconnectWS = () => { ws && ws.close(); };
+  window.applyMissionStartPublic = (data) => applyMissionStart(data);
+
+  function applyConferenceLog(data) {
+    if (data.phase === 'planning') {
+      const p = data.params || {};
+      setHUDStatus(
+        `<span style="color:#a0f0ff;font-weight:600">▶ 策定会議 — ミッション${data.mission_num}</span><br>` +
+        `通信圏: ${p.comm_range??'-'}単位 | 帰還閾値: ${p.return_threshold ? Math.round(p.return_threshold*100)+'%' : '-'}<br>` +
+        `中継間隔: ${p.builder_interval??'-'}単位 | 中継${p.builder_count??'-'}台 / 計${p.robot_count??'-'}台<br>` +
+        `<span style="color:#aaa;font-size:10px">${(data.summary||'').slice(0,60)}</span>`
+      );
+    } else if (data.phase === 'design') {
+      const specs = data.specs || {};
+      const lines = Object.entries(specs).map(([k,v]) => `${k}: ${String(v).slice(0,30)}`).join('<br>');
+      setHUDStatus(
+        `<span style="color:#a0ffc0;font-weight:600">▶ 設計会議 — アーキテクチャ確定</span><br>` +
+        `<span style="color:#aaa;font-size:10px">${lines}</span>`
+      );
+    }
+  }
+
+  function applyEvaluationResult(data) {
+    const s = data.scores || {};
+    const bar = (v) => {
+      const pct = Math.round((v||0)*100);
+      const col = pct >= 80 ? '#60ff80' : pct >= 50 ? '#ffcc00' : '#ff6060';
+      return `<span style="color:${col}">${pct}%</span>`;
+    };
+    const lessons = (data.lessons || []).slice(0,2).map(l =>
+      `<span style="color:#aaa;font-size:10px">→ ${l.slice(0,40)}</span>`
+    ).join('<br>');
+    setHUDStatus(
+      `<span style="color:#ffcc44;font-weight:600">▶ 評価会議 — ミッション${data.mission_num}</span><br>` +
+      `総合: ${bar(s.overall)} | 探査: ${bar(s.explore||s.coverage)} | 通信: ${bar(s.comm||s.chain)} | 帰還: ${bar(s.return||s.safety)}<br>` +
+      `トレンド: ${data.trend||'-'}<br>` +
+      lessons
+    );
+  }
+
+  function connect() {
+    try {
+      ws = new WebSocket(WS_URL);
+      window._ws = ws;
+    } catch (e) {
+      return;
+    }
+
+    ws.onopen = () => {
+      setHUDStatus('<span style="color:#60d0ff">AIエージェントと接続中</span>');
+      // 定期的にロボット状態を送信
+      const timer = setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) { clearInterval(timer); return; }
+        const st = getRobotStates();
+        ws.send(JSON.stringify({ type: 'swarm_state', ...st }));
+      }, SEND_INTERVAL_MS);
+    };
+
+    ws.onmessage = (ev) => {
+      let data;
+      try { data = JSON.parse(ev.data); } catch { return; }
+      if (data.type === 'render')             applyRenderCommands(data.commands || []);
+      else if (data.type === 'force_return') {
+        // Pythonから帰還閾値到達通知: 全explorer に帰還開始させる
+        for (const r of robots) {
+          if (r.userData.agentType !== 'builder' && !r.userData.returned) {
+            r.userData.returning = true;
+            r.userData.frontierTarget = null;
+            console.log(`[RETURN] robot returning triggered by force_return cmd`);
+          }
+        }
+      }
+      else if (data.type === 'mission_start')  applyMissionStart(data);
+      else if (data.type === 'conference_log') applyConferenceLog(data);
+      else if (data.type === 'evaluation_result') applyEvaluationResult(data);
+      else if (data.type === 'mission_result') {
+        const r = data.result || {};
+        setHUDStatus(
+          `<span style="color:#ffcc00;font-weight:600">ミッション完了 — 評価中...</span><br>` +
+          `探索面積: ${(r.explored_area_m2||0).toLocaleString()}m² | 深度: ${r.max_depth_m||0}m<br>` +
+          `損失: ${r.robots_lost}台 | ${r.terminate_reason}`
+        );
+      }
+    };
+
+    ws.onclose = () => {
+      setHUDStatus('AIエージェント未接続<br><span style="color:#506070;font-size:10px">↑ 起動ボタンを押してください</span>');
+      ws = null;
+      setTimeout(connect, 5000);  // 5秒後に再接続を試みる
+    };
+
+    ws.onerror = () => { ws && ws.close(); };
+  }
+
+  createHUD();
+  connect();
+})();
+</script>
+</body>
+</html>
