@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>3軸姿勢制御シミュレータ</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0f; color: #e0e0e0; font-family: 'Helvetica Neue', sans-serif; overflow: hidden; }
+    #canvas-container { width: 100vw; height: 100vh; }
+    #ui {
+      position: fixed; top: 20px; left: 20px; z-index: 10;
+      background: rgba(10,10,20,0.88); border: 1px solid #1e3a5f;
+      border-radius: 8px; padding: 16px 20px; width: 268px;
+      max-height: calc(100vh - 40px); overflow-y: auto;
+    }
+    #ui h1 { font-size: 12px; font-weight: 600; color: #60a0ff; letter-spacing: 0.08em; margin-bottom: 12px; }
+    .tab-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 12px; }
+    .btn {
+      display: block; width: 100%; padding: 7px 4px; margin-top: 6px;
+      background: #1a3a6a; border: 1px solid #3a6aaa; border-radius: 5px;
+      color: #90c0ff; font-size: 12px; cursor: pointer; text-align: center;
+      transition: background 0.15s; font-family: inherit;
+    }
+    .btn:hover { background: #2a4a8a; }
+    .btn.active { background: #0a4a2a; border-color: #2aaa6a; color: #80ffb0; }
+    .btn.warn { background: #4a2a0a; border-color: #aa6a2a; color: #ffb080; }
+    .btn.small { font-size: 10px; padding: 4px 2px; margin-top: 4px; }
+    .tab-btn { margin-top: 0; font-size: 11px; padding: 6px 2px; }
+    .mode-panel { display: none; }
+    .mode-panel.visible { display: block; }
+    .mode-desc { font-size: 10px; color: #6080a0; line-height: 1.6; margin-bottom: 8px; border-left: 2px solid #1e3a5f; padding-left: 8px; }
+    .ctrl { margin-bottom: 8px; }
+    .ctrl label { font-size: 11px; color: #8090a0; display: block; margin-bottom: 3px; }
+    .ctrl input[type=range] { width: 100%; accent-color: #3a7bd5; }
+    .btn-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .btn-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+    .section-label { margin-top: 10px; margin-bottom: 2px; font-size: 10px; color: #4a6a8a; }
+    #telemetry {
+      position: fixed; top: 20px; right: 20px; z-index: 10; width: 250px;
+      background: rgba(10,10,20,0.85); border: 1px solid #1e3a5f;
+      border-radius: 8px; padding: 12px 16px; font-size: 11px;
+    }
+    #telemetry h2 { font-size: 11px; color: #60a0ff; font-weight: 600; letter-spacing: 0.08em; margin-bottom: 8px; }
+    .tele-row { display: flex; justify-content: space-between; margin-bottom: 4px; color: #8090a0; }
+    .tele-row b { color: #c0d8f0; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .wheel-bar-wrap { margin-bottom: 5px; }
+    .wheel-bar-label { display: flex; justify-content: space-between; font-size: 10px; color: #8090a0; margin-bottom: 2px; }
+    .wheel-bar { height: 7px; background: #0d1524; border-radius: 3px; position: relative; overflow: hidden; border: 1px solid #1a2a44; }
+    .wheel-bar .fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+    #chart-panel {
+      position: fixed; bottom: 20px; right: 20px; z-index: 10;
+      background: rgba(5,8,18,0.92); border: 1px solid #1e3a5f;
+      border-radius: 8px; padding: 8px 12px 10px;
+    }
+    #chart-panel h2 { font-size: 10px; color: #4a8abf; font-weight: 600; letter-spacing: 0.06em; margin-bottom: 4px; }
+    #legend {
+      position: fixed; bottom: 20px; left: 20px; z-index: 10;
+      background: rgba(10,10,20,0.80); border: 1px solid #1e3a5f;
+      border-radius: 6px; padding: 8px 14px; font-size: 10px; line-height: 1.9; color: #8090a0;
+    }
+    .fw-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    #flash {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 20;
+      background: rgba(10,25,50,0.92); border: 1px solid #3a6aaa; border-radius: 8px;
+      padding: 10px 24px; font-size: 13px; color: #a0d0ff; opacity: 0; pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    #flash.show { opacity: 1; }
+    #flash.ok { border-color: #2aaa6a; color: #80ffb0; }
+    #flash.ng { border-color: #aa4a2a; color: #ffa080; }
+    #demo-caption {
+      display: none; position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%);
+      z-index: 25; max-width: 660px; background: rgba(5,12,30,0.92); border: 1px solid #3a6aaa;
+      border-radius: 10px; padding: 14px 26px; font-size: 15px; color: #cfe4ff;
+      line-height: 1.7; text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div id="canvas-container"></div>
+
+<div id="ui">
+  <h1>▶ 3-AXIS ATTITUDE CONTROL SIM</h1>
+  <div class="tab-row">
+    <button class="btn tab-btn" id="tab-free">🛰 フリーフロート</button>
+    <button class="btn tab-btn" id="tab-m1">⚖ 倒立振子 M1</button>
+    <button class="btn tab-btn" id="tab-edge">📐 辺バランス M2</button>
+    <button class="btn tab-btn" id="tab-corner">🔺 コーナー M4</button>
+    <button class="btn tab-btn" id="tab-roll">🎲 転がり M3</button>
+  </div>
+
+  <!-- ══ フリーフロート ══ -->
+  <div class="mode-panel" id="panel-free">
+    <div class="mode-desc">無重力（軌道上）での3軸姿勢制御。クォータニオンフィードバック則でリアクションホイール3基にトルク配分。外乱で溜まる角運動量とホイール飽和も再現。</div>
+    <button class="btn active" id="free-ctrl-toggle">制御: ON</button>
+    <div class="section-label">目標姿勢</div>
+    <div class="btn-grid-2">
+      <button class="btn small" data-target="id">基準姿勢</button>
+      <button class="btn small" data-target="y90">ヨー +90°</button>
+      <button class="btn small" data-target="x180">ロール 180°</button>
+      <button class="btn small" data-target="rand">ランダム</button>
+    </div>
+    <div class="section-label">外乱</div>
+    <div class="btn-grid-2">
+      <button class="btn small warn" id="free-impulse">撃力外乱</button>
+      <button class="btn small warn" id="free-tumble">タンブル発生</button>
+    </div>
+    <button class="btn small warn" id="free-constdist">定常外乱: OFF</button>
+    <button class="btn small" id="free-dump">モーメンタムダンプ（スラスタ）</button>
+  </div>
+
+  <!-- ══ 倒立振子 M1 ══ -->
+  <div class="mode-panel" id="panel-m1">
+    <div class="mode-desc">実機M1試験台の再現：100×100×6mm単板（PLA）を角のナイフエッジで受け、面内1軸をPLAフライホイールφ80mm・約45gで倒立させる。組立中の実機と同じ構成でPID/状態FBのリハーサルができる。面外はガイドで拘束（実機と同条件）。</div>
+    <button class="btn" id="m1-gravity">重力: 地球 1G</button>
+    <button class="btn" id="m1-law">制御則: 極配置 (s=−6)</button>
+    <div class="btn-grid-2">
+      <button class="btn small warn" id="m1-kick">外乱キック</button>
+      <button class="btn small" id="m1-reset">リセット</button>
+    </div>
+  </div>
+
+  <!-- ══ 辺バランス M2 ══ -->
+  <div class="mode-panel" id="panel-edge">
+    <div class="mode-desc">辺の上で1軸ホイールの反トルクにより倒立（Cubli 1D）。制御則 τ = k₁θ + k₂θ̇ + k₃ω_w（極配置 s=−6 三重極）。ホイール速度フィードバック k₃ で飽和を防ぐ。</div>
+    <button class="btn" id="edge-gravity">重力: 地球 1G</button>
+    <button class="btn" id="edge-law">制御則: 極配置 (s=−6)</button>
+    <button class="btn active" id="edge-k3">ホイール速度FB k₃: ON</button>
+    <button class="btn" id="edge-bias">バイアス外乱: OFF</button>
+    <div class="btn-grid-2">
+      <button class="btn small warn" id="edge-kick">外乱キック</button>
+      <button class="btn small" id="edge-reset">リセット</button>
+    </div>
+  </div>
+
+  <!-- ══ コーナーバランス M4 ══ -->
+  <div class="mode-panel" id="panel-corner">
+    <div class="mode-desc">コーナー1点で倒立する3D姿勢制御（Cubli / SHISEIGYO-3相当）。固定点まわりのオイラー方程式を積分し、3基のホイールで傾き2軸＋対角軸まわりの自転を制御。</div>
+    <button class="btn" id="corner-gravity">重力: 地球 1G</button>
+    <button class="btn" id="corner-spin">自転: OFF</button>
+    <div class="btn-grid-2">
+      <button class="btn small warn" id="corner-kick">外乱キック</button>
+      <button class="btn small" id="corner-reset">リセット</button>
+    </div>
+  </div>
+
+  <!-- ══ 転がり M3 ══ -->
+  <div class="mode-panel" id="panel-roll">
+    <div class="mode-desc">運動量ブレーキ型の転がり（M-blocks方式）。ホイールを高速回転→急ブレーキで角運動量を機体へ叩き込み、エッジを乗り越える。電気ブレーキとバンドブレーキの差、地球/月の差を実験できる。</div>
+    <div class="ctrl">
+      <label>目標回転数: <span id="roll-rpm-label">4800</span> rpm</label>
+      <input type="range" id="roll-rpm" min="1000" max="6000" value="4800" step="100">
+    </div>
+    <button class="btn" id="roll-brake-type">ブレーキ: 電気 (1.1 N·m)</button>
+    <div class="ctrl" style="margin-top:6px">
+      <label>ブレーキτ実測値 [N·m]（M1実測後に入力・空欄=上のプリセット）</label>
+      <input type="number" id="roll-tau-custom" min="0.05" max="5" step="0.05" placeholder="例: 0.85"
+        style="width:100%;background:#0d1524;border:1px solid #1a3050;color:#c0d8f0;padding:4px 6px;border-radius:4px;font-family:inherit;font-size:12px">
+    </div>
+    <button class="btn small" id="roll-threshold">現在条件の成功閾値rpmを計算</button>
+    <button class="btn" id="roll-eff">伝達効率: 100%（理想）</button>
+    <button class="btn" id="roll-gravity">重力: 地球 1G</button>
+    <div class="btn-grid-2">
+      <button class="btn small" id="roll-spinup">① スピンアップ</button>
+      <button class="btn small warn" id="roll-brake">② ブレーキ!</button>
+    </div>
+    <button class="btn small" id="roll-auto">▶ 自動実行（①→②）</button>
+    <button class="btn small" id="roll-slowmo">ブレーキ時スローモー: ON</button>
+    <button class="btn small" id="roll-reset">リセット</button>
+  </div>
+
+  <div class="section-label">時間</div>
+  <div class="btn-grid-3">
+    <button class="btn small ts-btn" data-ts="0">⏸ 停止</button>
+    <button class="btn small ts-btn" data-ts="0.1">0.1×</button>
+    <button class="btn small ts-btn active" data-ts="1">1×</button>
+  </div>
+  <button class="btn" id="btn-demo">▶ 自動デモ（約100秒・字幕付き）</button>
+  <a class="btn" href="index.html" style="text-decoration:none;margin-top:12px;border-color:#1a3a5a;color:#5090c0;font-size:11px;">← 群ロボットシミュレータへ</a>
+  <a class="btn" href="docs/attitude-sim-notes.md" style="text-decoration:none;border-color:#1a3a5a;color:#5090c0;font-size:11px;">📚 開発ノート・参考文献</a>
+</div>
+
+<div id="telemetry">
+  <h2>▶ TELEMETRY</h2>
+  <div id="telemetry-body"></div>
+</div>
+
+<div id="chart-panel">
+  <h2 id="chart-title">▶ CHART</h2>
+  <canvas id="chart" width="420" height="110" style="display:block"></canvas>
+</div>
+
+<div id="flash"></div>
+<div id="demo-caption"></div>
+
+<div id="legend">
+  <span class="fw-dot" style="background:#ff2244"></span>X軸ホイール
+  <span class="fw-dot" style="background:#22ff44;margin-left:8px"></span>Y軸ホイール
+  <span class="fw-dot" style="background:#2244ff;margin-left:8px"></span>Z軸ホイール<br>
+  左ドラッグ: 回転 ／ 右ドラッグ: 平行移動 ／ スクロール: ズーム<br>
+  機体: 100mm角・0.6kg ／ ホイール: φ80mm・100g（実機ビルドプラン準拠）<br>
+  M1タブ: 実機試験台（単板＋PLAホイールφ80/45g）を再現
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ════════════════════════════════════════════════════════════════
+// 物理パラメータ（SI単位）— 出典: ideas/space-lunar-planetary/hardware/build-plan.md §5
+// レンダリングは 1 unit = 0.1 m（立方体一辺 = 1 unit）
+// ════════════════════════════════════════════════════════════════
+const P = {
+  a:    0.1,        // 一辺 [m]
+  m:    0.6,        // 総質量 [kg]
+  Icom: 1.0e-3,     // 重心まわり慣性（立方体・各軸）(1/6)ma² [kg·m²]
+  Ie:   4.0e-3,     // 辺まわり慣性 (2/3)ma² [kg·m²]
+  dE:   0.1 / Math.SQRT2,          // 辺→重心距離 0.0707 [m]
+  rC:   0.1 * Math.sqrt(3) / 2,    // コーナー→重心距離 0.0866 [m]
+  Iw:   8.0e-5,     // ホイール慣性 φ80mm・100g [kg·m²]
+  wMax: 4800 * Math.PI * 2 / 60,   // ホイール最大角速度 4800rpm ≈ 502.7 [rad/s]
+  tauW:     0.04,   // モータ加速トルク上限（連続）[N·m]
+  tauBal:   0.30,   // バランス制御トルク上限（短時間）[N·m]
+  brakeE:   1.1,    // 電気ブレーキトルク [N·m]（40A×Kt 試算値）
+  brakeB:   2.7,    // 機械式バンドブレーキ [N·m]（15ms停止要求値）
+  gE:   9.81, gM: 1.62,            // 地球 / 月 [m/s²]
+  Kt:   0.027,  // モータトルク定数 5010 360KV [N·m/A]（build-plan §6-3）
+  escA: 40,     // B-G431B-ESC1 ピーク電流 [A]
+  // M1実機試験台（単板100×100×6mm・角ナイフエッジ受け）[試算・cad/README.md実測寸法より]
+  m1: {
+    m:  0.45,     // 総質量: 板PLA≈70g＋モータ80g＋FW45g＋電池・電装≈250g [試算]
+    d:  0.0707,   // 角→重心距離（重心≈板中心と仮定）a/√2 [m]
+    I:  2.4e-3,   // 角まわり慣性: 板 m_p(a²/6+d²) ＋ 集中質量 Σm·d² [試算]
+    Iw: 3.6e-5,   // PLAフライホイールφ80mm・約45g: ½·0.045·0.04² [試算]
+  },
+};
+const PHYS_DT = 1 / 2000;   // 物理刻み 0.5ms（ブレーキ~15msを解像）
+const RAD2RPM = 60 / (2 * Math.PI);
+
+// ════════════════════════════════════════════════════════════════
+// Three.js セットアップ
+// ════════════════════════════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04050f);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 500);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 1.2;
+controls.maxDistance = 30;
+
+scene.add(new THREE.AmbientLight(0x8899ff, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.6);
+sun.position.set(4, 8, 5);
+scene.add(sun);
+const fill = new THREE.PointLight(0x4488ff, 3, 12);
+fill.position.set(-2, 3, 2);
+scene.add(fill);
+
+// 星空
+{
+  const n = 900, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const r = 60 + Math.random() * 120;
+    const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+    pos[i*3]   = r * Math.sin(ph) * Math.cos(th);
+    pos[i*3+1] = r * Math.cos(ph);
+    pos[i*3+2] = r * Math.sin(ph) * Math.sin(th);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x88aacc, size: 0.28, sizeAttenuation: true })));
+}
+
+// 地面（地上モード用）
+const groundGroup = new THREE.Group();
+{
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(24, 24),
+    new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2;
+  groundGroup.add(floor);
+  const grid = new THREE.GridHelper(24, 24, 0x1a2a4a, 0x111a30);
+  grid.position.y = 0.001;
+  groundGroup.add(grid);
+}
+scene.add(groundGroup);
+
+// ── 立方体（index.html の createRobot を流用・JAXA三軸モジュール参考の円盤FW×3） ──
+function makeCube() {
+  const group = new THREE.Group();
+  const bodyGeo = new THREE.BoxGeometry(1, 1, 1);
+  const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({
+    color: 0x3388ff, roughness: 0.15, metalness: 0.85, transparent: true, opacity: 0.42,
+  }));
+  group.add(body);
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(bodyGeo),
+    new THREE.LineBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 0.85 })));
+
+  const FW_R = 0.46, FW_TH = 0.06, N_SPOKES = 6;
+  function makeDiskFW(hex) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: hex, metalness: 0.88, roughness: 0.08,
+      emissive: new THREE.Color(hex), emissiveIntensity: 0.3,
+    });
+    const disk = new THREE.Mesh(new THREE.CylinderGeometry(FW_R, FW_R, FW_TH, 32), mat);
+    const sp = [];
+    for (let i = 0; i < N_SPOKES; i++) {
+      const a = (i / N_SPOKES) * Math.PI * 2;
+      sp.push(0, 0, 0, Math.cos(a) * FW_R * 0.85, 0, Math.sin(a) * FW_R * 0.85);
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+    const spokes = new THREE.LineSegments(sg, new THREE.LineBasicMaterial({ color: hex, transparent: true, opacity: 0.8 }));
+    const orient = new THREE.Group();
+    orient.add(disk); orient.add(spokes);
+    return { orient, disk };
+  }
+  const fx = makeDiskFW(0xff2244);
+  fx.orient.rotation.z = Math.PI / 2;
+  const sx = new THREE.Group(); sx.add(fx.orient); sx.position.x = 0.47; group.add(sx);
+  const fy = makeDiskFW(0x22ff44);
+  const sy = new THREE.Group(); sy.add(fy.orient); sy.position.y = -0.47; group.add(sy);
+  const fz = makeDiskFW(0x2244ff);
+  fz.orient.rotation.x = Math.PI / 2;
+  const sz = new THREE.Group(); sz.add(fz.orient); sz.position.z = 0.47; group.add(sz);
+
+  const glow = new THREE.PointLight(0x3388ff, 1.2, 3.0);
+  group.add(glow);
+  return {
+    group, glow,
+    spin: { x: sx, y: sy, z: sz },
+    disk: { x: fx.disk, y: fy.disk, z: fz.disk },
+    angle: { x: 0, y: 0, z: 0 },
+  };
+}
+const cube = makeCube();
+scene.add(cube.group);
+
+// ホイールの見た目回転: 実回転数はエイリアシングするので視覚上は capped
+function spinWheels(w, dt) {  // w = {x,y,z} [rad/s 実値]
+  for (const ax of ['x', 'y', 'z']) {
+    const om = w[ax];
+    const vis = Math.sign(om) * Math.min(Math.abs(om), 28); // 視覚上限 28rad/s
+    cube.angle[ax] += vis * dt;
+    cube.spin[ax].rotation[ax] = cube.angle[ax];
+    cube.disk[ax].material.emissiveIntensity = 0.25 + 2.4 * Math.min(Math.abs(om) / P.wMax, 1);
+  }
+}
+
+// ── M1試験台（単板100×100×6mm＋前面フライホイールφ80） ──
+function makeM1Rig() {
+  const group = new THREE.Group();
+  // 単板（PLA・6mm厚）: XY面内 1×1、厚み0.06（Z）
+  const plateGeo = new THREE.BoxGeometry(1, 1, 0.06);
+  const plate = new THREE.Mesh(plateGeo, new THREE.MeshStandardMaterial({
+    color: 0x2a5a8a, roughness: 0.6, metalness: 0.15, transparent: true, opacity: 0.85,
+  }));
+  group.add(plate);
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(plateGeo),
+    new THREE.LineBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 0.8 })));
+
+  // フライホイール（前面中央・スピン軸=Z・青系）
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x2244ff, metalness: 0.85, roughness: 0.1,
+    emissive: new THREE.Color(0x2244ff), emissiveIntensity: 0.3,
+  });
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 32), mat);
+  disk.rotation.x = Math.PI / 2;
+  const sp = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    sp.push(0, 0, 0, Math.cos(a) * 0.34, Math.sin(a) * 0.34, 0);
+  }
+  const sg = new THREE.BufferGeometry();
+  sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+  const spokes = new THREE.LineSegments(sg, new THREE.LineBasicMaterial({ color: 0x99bbff, transparent: true, opacity: 0.9 }));
+  spokes.position.z = 0.032;   // ディスク前面に出して回転を可視化
+  const spinner = new THREE.Group();
+  spinner.add(disk); spinner.add(spokes);
+  spinner.position.z = 0.09;   // 板前面に浮かせて配置
+  group.add(spinner);
+
+  // モータハブ
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 16),
+    new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.9, roughness: 0.3 }));
+  hub.rotation.x = Math.PI / 2;
+  hub.position.z = 0.06;
+  group.add(hub);
+
+  return { group, spinner, disk, angle: 0 };
+}
+const m1rig = makeM1Rig();
+m1rig.group.visible = false;
+scene.add(m1rig.group);
+
+// 目標姿勢ゴースト（フリーフロート用）
+const ghost = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.15, 1.15, 1.15)),
+  new THREE.LineBasicMaterial({ color: 0xffaa33, transparent: true, opacity: 0.4 }));
+scene.add(ghost);
+
+// ピボットマーカー
+const pivotSphere = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0xffcc44 }));
+const pivotEdge = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.06, 12),
+  new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.85 }));
+pivotEdge.rotation.x = Math.PI / 2;
+scene.add(pivotSphere); scene.add(pivotEdge);
+
+// ════════════════════════════════════════════════════════════════
+// 数学ヘルパ
+// ════════════════════════════════════════════════════════════════
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+// クォータニオン運動学 q̇ = ½ q ⊗ (0, ω_body)  [7]
+function quatIntegrate(q, w, h) {
+  const dq = new THREE.Quaternion(w.x * 0.5 * h, w.y * 0.5 * h, w.z * 0.5 * h, 0);
+  dq.multiplyQuaternions(q, dq);
+  q.set(q.x + dq.x, q.y + dq.y, q.z + dq.z, q.w + dq.w).normalize();
+}
+// ホイールトルク指令 → 飽和処理して実トルクを返す（|h_w| ≤ hMax、既定は Iw·wMax）
+function wheelTorque(hw, tauCmd, tauLim, h, hMax = P.Iw * P.wMax) {
+  let t = clamp(tauCmd, -tauLim, tauLim);
+  const hNext = hw + t * h;
+  if (hNext > hMax)  t = (hMax - hw) / h;
+  if (hNext < -hMax) t = (-hMax - hw) / h;
+  return t;
+}
+
+// ════════════════════════════════════════════════════════════════
+// 制御ゲイン設計（極配置）[試算・docs/attitude-sim-notes.md 参照]
+// 1軸倒立系 x=[θ, θ̇, ω_w], τ = k₁θ + k₂θ̇ + k₃ω_w を三重極 s=−p に配置:
+//   k₁ = mgd + 3p²·I,  k₃ = p³·I·Iw / (mgd),  k₂ = I·(3p + k₃/Iw)
+// ════════════════════════════════════════════════════════════════
+function balanceGains(I, mgd, Iw = P.Iw, p = 6) {
+  const k1 = mgd + 3 * p * p * I;
+  const k3 = p ** 3 * I * Iw / mgd;
+  const k2 = I * (3 * p + k3 / Iw);
+  return { k1, k2, k3 };
+}
+
+// LQR（離散時間Riccati値反復・単入力なので逆行列不要）[試算][7]
+// x=[θ, θ̇, ω_w], ẋ = Ax + Bτ を dt=1ms でZOH離散化し、
+// コスト Σ(xᵀQx + Rτ²)dt を最小化するゲインを反復で求める。
+// 戻り値は τ = k₁θ + k₂θ̇ + k₃ω_w の形（極配置と同じ符号規約）。
+function lqrGains(I, mgd, Iw, Qc = [60, 1.2, 4e-5], Rc = 400) {
+  const dt = 1e-3;
+  const Ad = [[1, dt, 0], [mgd / I * dt, 1, 0], [0, 0, 1]];
+  const Bd = [0, -dt / I, dt / Iw];
+  const Qd = [Qc[0] * dt, Qc[1] * dt, Qc[2] * dt];
+  const Rd = Rc * dt;
+  let Pm = [[Qd[0], 0, 0], [0, Qd[1], 0], [0, 0, Qd[2]]];
+  let K = [0, 0, 0];
+  for (let it = 0; it < 60000; it++) {
+    const PB = [0, 1, 2].map(i => Pm[i][0] * Bd[0] + Pm[i][1] * Bd[1] + Pm[i][2] * Bd[2]);
+    const s = Rd + Bd[0] * PB[0] + Bd[1] * PB[1] + Bd[2] * PB[2];
+    const PA = [[0,0,0],[0,0,0],[0,0,0]];
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+      PA[i][j] = Pm[i][0] * Ad[0][j] + Pm[i][1] * Ad[1][j] + Pm[i][2] * Ad[2][j];
+    const BtPA = [0, 1, 2].map(j => Bd[0] * PA[0][j] + Bd[1] * PA[1][j] + Bd[2] * PA[2][j]);
+    const AtPB = [0, 1, 2].map(i => Ad[0][i] * PB[0] + Ad[1][i] * PB[1] + Ad[2][i] * PB[2]);
+    const Pn = [[0,0,0],[0,0,0],[0,0,0]];
+    let maxd = 0;
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      const AtPA = Ad[0][i] * PA[0][j] + Ad[1][i] * PA[1][j] + Ad[2][i] * PA[2][j];
+      Pn[i][j] = AtPA - AtPB[i] * BtPA[j] / s + (i === j ? Qd[i] : 0);
+      maxd = Math.max(maxd, Math.abs(Pn[i][j] - Pm[i][j]));
+    }
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+      Pm[i][j] = (Pn[i][j] + Pn[j][i]) / 2;   // 対称化
+    K = BtPA.map(v => v / s);
+    if (it > 100 && maxd < 1e-10) break;
+  }
+  // u = −Kx、実装形 τ = k·x に合わせて符号反転
+  return { k1: -K[0], k2: -K[1], k3: -K[2] };
+}
+
+// ════════════════════════════════════════════════════════════════
+// UI ユーティリティ
+// ════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+let flashTimer = null;
+function flash(msg, kind = '') {
+  const el = $('flash');
+  el.textContent = msg;
+  el.className = 'show ' + kind;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { el.className = ''; }, 2600);
+}
+
+// ストリップチャート
+class StripChart {
+  constructor(canvas) { this.cv = canvas; this.ctx = canvas.getContext('2d'); this.series = []; this.n = canvas.width; }
+  config(series) { this.series = series.map(s => ({ ...s, buf: new Array(this.n).fill(null) })); }
+  sample() { for (const s of this.series) { s.buf.push(s.get()); s.buf.shift(); } }
+  draw() {
+    const { ctx, cv } = this;
+    ctx.fillStyle = '#050812'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.strokeStyle = '#14243f'; ctx.beginPath();
+    ctx.moveTo(0, cv.height / 2); ctx.lineTo(cv.width, cv.height / 2); ctx.stroke();
+    let ly = 12;
+    for (const s of this.series) {
+      ctx.strokeStyle = s.color; ctx.lineWidth = 1.4; ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < this.n; i++) {
+        const v = s.buf[i];
+        if (v === null) continue;
+        const t = (v - s.range[0]) / (s.range[1] - s.range[0]);
+        const y = cv.height - 4 - t * (cv.height - 8);
+        if (!started) { ctx.moveTo(i, y); started = true; } else ctx.lineTo(i, y);
+      }
+      ctx.stroke();
+      const cur = s.buf[this.n - 1];
+      ctx.fillStyle = s.color; ctx.font = '10px monospace';
+      ctx.fillText(`${s.label}: ${cur === null ? '—' : cur.toFixed(s.digits ?? 1)}${s.unit}`, 6, ly);
+      ly += 12;
+    }
+  }
+}
+const chart = new StripChart($('chart'));
+
+function wheelBarsHTML(w) { // w: {x,y,z} rad/s → √スケールバー（微小回転も見えるように）
+  const colors = { x: '#ff2244', y: '#22ff44', z: '#2244ff' };
+  let html = '';
+  for (const ax of ['x', 'y', 'z']) {
+    const rpm = w[ax] * RAD2RPM;
+    const frac = Math.min(Math.abs(rpm) / 4800, 1);
+    const wpct = Math.sqrt(frac) * 50;
+    const satWarn = frac > 0.9;
+    const left = rpm >= 0 ? 50 : 50 - wpct;
+    html += `<div class="wheel-bar-wrap">
+      <div class="wheel-bar-label"><span style="color:${colors[ax]}">FW-${ax.toUpperCase()}</span>
+      <span style="${satWarn ? 'color:#ff6644;font-weight:600' : ''}">${rpm.toFixed(0)} rpm${satWarn ? ' ⚠飽和' : ''}</span></div>
+      <div class="wheel-bar"><div class="fill" style="left:${left}%;width:${wpct}%;background:${satWarn ? '#ff6644' : colors[ax]}"></div></div>
+    </div>`;
+  }
+  return html + `<div style="font-size:9px;color:#4a6a8a;margin-top:2px">バーは√スケール（±4,800rpm）</div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// モード共通の状態
+// ════════════════════════════════════════════════════════════════
+let currentMode = null;
+let timescale = 1;
+const CAM_PRESET = {
+  free:   { pos: [2.6, 2.0, 3.4], tgt: [0, 1.0, 0] },
+  m1:     { pos: [1.6, 1.3, 3.0], tgt: [0, 0.7, 0] },
+  edge:   { pos: [1.9, 1.5, 2.8], tgt: [0, 0.6, 0] },
+  corner: { pos: [2.1, 1.7, 3.0], tgt: [0, 0.8, 0] },
+  roll:   { pos: [2.0, 1.5, 3.6], tgt: [0.8, 0.5, 0] },
+};
+
+// ════════════════════════════════════════════════════════════════
+// モード1: フリーフロート — 軌道上3軸姿勢制御
+//   体固定系: I ω̇ = τ_ext − ḣ_w − ω×(Iω + h_w)   [7][8]
+//   制御則: τ_c = −Kp·vec(q_e) − Kd·ω,  q_e = q_t* ⊗ q,  ḣ_w = −τ_c
+// ════════════════════════════════════════════════════════════════
+const free = {
+  name: 'free',
+  q: new THREE.Quaternion(), w: new THREE.Vector3(),
+  hw: { x: 0, y: 0, z: 0 },
+  qt: new THREE.Quaternion(),
+  ctrlOn: true, constDist: false,
+  impulseLeft: 0, impulseAxis: new THREE.Vector3(1, 0, 0),
+  Kp: 8e-3, Kd: 4e-3, tauMax: P.tauW,  // ωn≈2rad/s・臨界減衰 [試算]
+  distAxisW: new THREE.Vector3(0.42, 0.81, 0.41).normalize(), distMag: 1.5e-3,
+
+  init() {
+    this.q.identity(); this.w.set(0, 0, 0);
+    this.hw = { x: 0, y: 0, z: 0 };
+    this.qt.identity();
+    this.impulseLeft = 0;
+  },
+  enter() {
+    groundGroup.visible = false; pivotSphere.visible = false; pivotEdge.visible = false;
+    ghost.visible = true; ghost.position.set(0, 1.0, 0);
+    chart.config([
+      { label: '目標との角度差', unit: '°', color: '#60d0ff', range: [0, 185], get: () => this.errAngle() },
+      { label: '|h_w| 蓄積運動量', unit: ' mN·m·s', color: '#ffaa33', range: [0, 45], digits: 1, get: () => Math.hypot(this.hw.x, this.hw.y, this.hw.z) * 1000 },
+    ]);
+    $('chart-title').textContent = '▶ 姿勢誤差とホイール蓄積角運動量';
+  },
+  errAngle() {
+    const qe = this.qt.clone().conjugate().multiply(this.q);
+    return 2 * Math.acos(clamp(Math.abs(qe.w), -1, 1)) * 180 / Math.PI;
+  },
+  step(h) {
+    const I = P.Icom;
+    // 外乱（世界系→体固定系）
+    const tauExt = new THREE.Vector3();
+    if (this.impulseLeft > 0) {
+      tauExt.add(this.impulseAxis.clone().multiplyScalar(5e-3));
+      this.impulseLeft -= h;
+    }
+    if (this.constDist) tauExt.add(this.distAxisW.clone().multiplyScalar(this.distMag));
+    tauExt.applyQuaternion(this.q.clone().conjugate());
+
+    // 制御則（クォータニオンフィードバック [8]）
+    let tc = new THREE.Vector3();
+    if (this.ctrlOn) {
+      const qe = this.qt.clone().conjugate().multiply(this.q);
+      const s = qe.w >= 0 ? 1 : -1;
+      tc.set(
+        -this.Kp * qe.x * s - this.Kd * this.w.x,
+        -this.Kp * qe.y * s - this.Kd * this.w.y,
+        -this.Kp * qe.z * s - this.Kd * this.w.z);
+    }
+    // ホイール実トルク（飽和込み）: ḣ_w = −τ_c
+    const hdot = {
+      x: wheelTorque(this.hw.x, -tc.x, this.tauMax, h),
+      y: wheelTorque(this.hw.y, -tc.y, this.tauMax, h),
+      z: wheelTorque(this.hw.z, -tc.z, this.tauMax, h),
+    };
+    // 剛体回転運動方程式（体固定系）
+    const Hw = new THREE.Vector3(this.hw.x, this.hw.y, this.hw.z);
+    const Iw_ = this.w.clone().multiplyScalar(I).add(Hw);
+    const gyro = this.w.clone().cross(Iw_);
+    this.w.x += (tauExt.x - hdot.x - gyro.x) / I * h;
+    this.w.y += (tauExt.y - hdot.y - gyro.y) / I * h;
+    this.w.z += (tauExt.z - hdot.z - gyro.z) / I * h;
+    this.hw.x += hdot.x * h; this.hw.y += hdot.y * h; this.hw.z += hdot.z * h;
+    quatIntegrate(this.q, this.w, h);
+  },
+  render(dt) {
+    cube.group.position.set(0, 1.0, 0);
+    cube.group.quaternion.copy(this.q);
+    ghost.quaternion.copy(this.qt);
+    spinWheels({ x: this.hw.x / P.Iw, y: this.hw.y / P.Iw, z: this.hw.z / P.Iw }, dt);
+  },
+  telemetry() {
+    const e = new THREE.Euler().setFromQuaternion(this.q, 'YXZ');
+    const Hb = new THREE.Vector3(this.w.x * P.Icom + this.hw.x, this.w.y * P.Icom + this.hw.y, this.w.z * P.Icom + this.hw.z);
+    const Hworld = Hb.applyQuaternion(this.q);
+    return `
+      <div class="tele-row"><span>ヨー/ピッチ/ロール</span><b>${(e.y*57.3).toFixed(0)}° / ${(e.x*57.3).toFixed(0)}° / ${(e.z*57.3).toFixed(0)}°</b></div>
+      <div class="tele-row"><span>目標との角度差</span><b>${this.errAngle().toFixed(1)}°</b></div>
+      <div class="tele-row"><span>角速度 |ω|</span><b>${this.w.length().toFixed(2)} rad/s</b></div>
+      <div class="tele-row"><span>系の全角運動量 |H|</span><b>${(Hworld.length()*1000).toFixed(2)} mN·m·s</b></div>
+      ${wheelBarsHTML({ x: this.hw.x / P.Iw, y: this.hw.y / P.Iw, z: this.hw.z / P.Iw })}
+      <div style="font-size:9px;color:#4a6a8a;margin-top:4px">外部トルクゼロなら |H| は一定（角運動量保存の検算）</div>`;
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
+// モード1.5: 倒立振子 M1 — 実機試験台（単板を角のナイフエッジで倒立）
+//   力学は辺バランスと同型: I θ̈ = mgd·sinθ − τ,  I_w1 ω̇_w = τ
+//   パラメータのみ実機M1構成 [試算]（P.m1）。面外はガイド拘束と仮定。
+// ════════════════════════════════════════════════════════════════
+const m1 = {
+  name: 'm1',
+  th: 0, thd: 0, ww: 0, g: P.gE,
+  failed: false, failTimer: 0, kickSign: 1,
+  gains: null, gainsPP: null, gainsLQR: null,
+  ctrlLaw: 'pp',
+  lastTau: 0, peakTau: 0,
+
+  computeGains() {
+    const mgd = P.m1.m * this.g * P.m1.d;
+    this.gainsPP = balanceGains(P.m1.I, mgd, P.m1.Iw);
+    this.gainsLQR = lqrGains(P.m1.I, mgd, P.m1.Iw);
+    this.gains = this.ctrlLaw === 'lqr' ? this.gainsLQR : this.gainsPP;
+  },
+  init() {
+    this.th = 0.03; this.thd = 0; this.ww = 0;
+    this.failed = false;
+    this.lastTau = 0; this.peakTau = 0;
+    this.computeGains();
+  },
+  enter() {
+    groundGroup.visible = true; ghost.visible = false;
+    pivotSphere.visible = true; pivotEdge.visible = false;
+    pivotSphere.position.set(0, 0.02, 0);
+    chart.config([
+      { label: '傾き θ', unit: '°', color: '#60d0ff', range: [-15, 15], get: () => this.th * 57.3 },
+      { label: 'ホイール', unit: ' rpm', color: '#2266ff', range: [-4800, 4800], digits: 0, get: () => this.ww * RAD2RPM },
+    ]);
+    $('chart-title').textContent = '▶ M1試験台: 傾き角とホイール回転数';
+  },
+  step(h) {
+    const mgd = P.m1.m * this.g * P.m1.d;
+    if (this.failed) {
+      if (Math.abs(this.th) < Math.PI / 4 - 0.01) {
+        this.thd += mgd * Math.sin(this.th) / P.m1.I * h;
+        this.th += this.thd * h;
+      } else { this.th = Math.sign(this.th) * (Math.PI / 4 - 0.01); this.thd = 0; }
+      this.ww *= (1 - 0.3 * h);
+      this.failTimer -= h;
+      if (this.failTimer <= 0) { this.init(); flash('リセットしました'); }
+      return;
+    }
+    const { k1, k2, k3 } = this.gains;
+    const noise = (Math.random() - 0.5) * 2e-4;
+    let tau = clamp(k1 * this.th + k2 * this.thd + k3 * this.ww, -P.tauBal, P.tauBal);
+    tau = wheelTorque(P.m1.Iw * this.ww, tau, P.tauBal, h, P.m1.Iw * P.wMax);
+    this.lastTau = tau;
+    this.peakTau = Math.max(this.peakTau, Math.abs(tau));
+    this.thd += (mgd * Math.sin(this.th) - tau + noise) / P.m1.I * h;
+    this.th += this.thd * h;
+    this.ww += tau / P.m1.Iw * h;
+    if (Math.abs(this.th) > 0.55) {
+      this.failed = true; this.failTimer = 2.2;
+      flash('転倒！ 制御可能範囲を超えました', 'ng');
+    }
+  },
+  render(dt) {
+    // 板の角（体固定 (-0.5,-0.5)）が原点のナイフエッジに固定。θ>0 で +X 側へ傾く
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4 - this.th);
+    const c = new THREE.Vector3(0.5, 0.5, 0).applyQuaternion(q);
+    m1rig.group.quaternion.copy(q);
+    m1rig.group.position.copy(c);
+    const vis = Math.sign(this.ww) * Math.min(Math.abs(this.ww), 28);
+    m1rig.angle += vis * dt;
+    m1rig.spinner.rotation.z = m1rig.angle;
+    m1rig.disk.material.emissiveIntensity = 0.25 + 2.4 * Math.min(Math.abs(this.ww) / P.wMax, 1);
+  },
+  telemetry() {
+    return `
+      <div class="tele-row"><span>傾き角 θ</span><b>${(this.th*57.3).toFixed(2)}°</b></div>
+      <div class="tele-row"><span>角速度 θ̇</span><b>${(this.thd*57.3).toFixed(1)} °/s</b></div>
+      <div class="tele-row"><span>ホイール回転数</span><b>${(this.ww*RAD2RPM).toFixed(0)} rpm</b></div>
+      <div class="tele-row"><span>重力</span><b>${this.g === P.gE ? '地球 1G' : '月 1/6G'}</b></div>
+      <div class="tele-row"><span>制御則</span><b>${this.ctrlLaw === 'lqr' ? 'LQR' : '極配置 s=−6'}</b></div>
+      <div class="tele-row"><span>ゲイン k₁/k₂/k₃</span><b>${this.gains.k1.toFixed(2)}/${this.gains.k2.toFixed(3)}/${(this.gains.k3*1e4).toFixed(2)}e-4</b></div>
+      <div class="tele-row"><span>モータ電流(推定)</span><b>${(Math.abs(this.lastTau)/P.Kt).toFixed(1)} / pk <span style="${this.peakTau/P.Kt > P.escA ? 'color:#ff6644' : ''}">${(this.peakTau/P.Kt).toFixed(1)}</span> A</b></div>
+      <div style="font-size:9px;color:#4a6a8a;margin-top:4px">機体: 単板0.45kg[試算]・PLAホイールφ80/45g（実機M1構成）</div>`;
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
+// モード2: 辺バランス（M2 / Cubli 1D）[1]
+//   I_e θ̈ = mgd·sinθ − τ,  I_w ω̇_w = τ,  τ = k₁θ + k₂θ̇ + k₃ω_w
+// ════════════════════════════════════════════════════════════════
+const edge = {
+  name: 'edge',
+  th: 0, thd: 0, ww: 0, g: P.gE,
+  failed: false, failTimer: 0, kickSign: 1,
+  gains: null, gainsPP: null, gainsLQR: null,
+  ctrlLaw: 'pp',   // 'pp'=極配置 s=−6 | 'lqr'
+  k3on: true,    // ホイール速度FBの有効/無効（飽和の教材デモ用）
+  bias: 0,       // 定常バイアス外乱 [N·m]（CoMオフセット等の模擬）
+  lastTau: 0, peakTau: 0,
+
+  computeGains() {
+    const mgd = P.m * this.g * P.dE;
+    this.gainsPP = balanceGains(P.Ie, mgd);
+    this.gainsLQR = lqrGains(P.Ie, mgd, P.Iw);
+    this.gains = this.ctrlLaw === 'lqr' ? this.gainsLQR : this.gainsPP;
+  },
+  init() {
+    this.th = 0.03; this.thd = 0; this.ww = 0;
+    this.failed = false;
+    this.lastTau = 0; this.peakTau = 0;
+    this.computeGains();
+  },
+  enter() {
+    groundGroup.visible = true; ghost.visible = false;
+    pivotSphere.visible = false; pivotEdge.visible = true;
+    pivotEdge.position.set(0, 0.02, 0);
+    chart.config([
+      { label: '傾き θ', unit: '°', color: '#60d0ff', range: [-15, 15], get: () => this.th * 57.3 },
+      { label: 'ホイール', unit: ' rpm', color: '#2266ff', range: [-4800, 4800], digits: 0, get: () => this.ww * RAD2RPM },
+    ]);
+    $('chart-title').textContent = '▶ 傾き角とホイール回転数';
+  },
+  step(h) {
+    if (this.failed) {
+      // 転倒アニメーション: 重力のみで倒れて止まる
+      const mgd = P.m * this.g * P.dE;
+      if (Math.abs(this.th) < Math.PI / 4 - 0.01) {
+        this.thd += mgd * Math.sin(this.th) / P.Ie * h;
+        this.th += this.thd * h;
+      } else { this.th = Math.sign(this.th) * (Math.PI / 4 - 0.01); this.thd = 0; }
+      this.ww *= (1 - 0.3 * h);
+      this.failTimer -= h;
+      if (this.failTimer <= 0) { this.init(); flash('リセットしました'); }
+      return;
+    }
+    const mgd = P.m * this.g * P.dE;
+    const { k1, k2, k3 } = this.gains;
+    // センサノイズ相当の微小外乱
+    const noise = (Math.random() - 0.5) * 2e-4;
+    const k3eff = this.k3on ? k3 : 0;
+    let tau = clamp(k1 * this.th + k2 * this.thd + k3eff * this.ww, -P.tauBal, P.tauBal);
+    tau = wheelTorque(P.Iw * this.ww, tau, P.tauBal, h);
+    this.lastTau = tau;
+    this.peakTau = Math.max(this.peakTau, Math.abs(tau));
+    this.thd += (mgd * Math.sin(this.th) - tau + this.bias + noise) / P.Ie * h;
+    this.th += this.thd * h;
+    this.ww += tau / P.Iw * h;
+    if (Math.abs(this.th) > 0.55) {
+      this.failed = true; this.failTimer = 2.2;
+      flash(this.k3on ? '転倒！ 制御可能範囲を超えました'
+                      : '転倒！ k₃なしではホイール飽和を防げない（→k₃をONに）', 'ng');
+    }
+  },
+  render(dt) {
+    // ピボット辺=Z軸上の原点。θ>0 で +X 側へ傾く
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 4 - this.th);
+    const c = new THREE.Vector3(0.5, 0.5, 0).applyQuaternion(q);
+    cube.group.quaternion.copy(q);
+    cube.group.position.copy(c);
+    spinWheels({ x: 0, y: 0, z: this.ww }, dt);
+  },
+  telemetry() {
+    return `
+      <div class="tele-row"><span>傾き角 θ</span><b>${(this.th*57.3).toFixed(2)}°</b></div>
+      <div class="tele-row"><span>角速度 θ̇</span><b>${(this.thd*57.3).toFixed(1)} °/s</b></div>
+      <div class="tele-row"><span>重力</span><b>${this.g === P.gE ? '地球 1G' : '月 1/6G'}</b></div>
+      <div class="tele-row"><span>制御則</span><b>${this.ctrlLaw === 'lqr' ? 'LQR' : '極配置 s=−6'}</b></div>
+      <div class="tele-row"><span>ゲイン k₁/k₂/k₃</span><b>${this.gains.k1.toFixed(2)}/${this.gains.k2.toFixed(3)}/${this.k3on ? (this.gains.k3*1e4).toFixed(2)+'e-4' : '<span style="color:#ff6644">OFF</span>'}</b></div>
+      <div class="tele-row"><span>モータ電流(推定)</span><b>${(Math.abs(this.lastTau)/P.Kt).toFixed(1)} / pk <span style="${this.peakTau/P.Kt > P.escA ? 'color:#ff6644' : ''}">${(this.peakTau/P.Kt).toFixed(1)}</span> A</b></div>
+      ${this.bias !== 0 ? '<div class="tele-row"><span>バイアス外乱</span><b>2.0 mN·m</b></div>' : ''}
+      ${wheelBarsHTML({ x: 0, y: 0, z: this.ww })}
+      ${!this.k3on && this.bias !== 0 ? '<div style="font-size:9px;color:#ffaa66;margin-top:2px">k₃なし＋バイアス → ホイールが漸増し飽和で転倒（約20秒）</div>' : ''}`;
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
+// モード3: コーナーバランス（M4 / Cubli 3D・SHISEIGYO-3相当）[1][2][5]
+//   固定点（コーナー）まわり: I_c ω̇ = τ_g − ḣ_w − ω×(I_c ω + h_w)
+//   I_c = I_com·E + m(|r|²E − rrᵀ),  r = (a/2)(1,1,1)
+//   制御: err = n×up_b,  τ_c = k₁err − k₂ω_⊥ − (k₃/Iw)h_⊥ − k_yaw(ω·n − s_t)n
+// ════════════════════════════════════════════════════════════════
+const corner = {
+  name: 'corner',
+  q: new THREE.Quaternion(), w: new THREE.Vector3(),
+  hw: new THREE.Vector3(), g: P.gE,
+  n: new THREE.Vector3(1, 1, 1).normalize(),
+  rB: new THREE.Vector3(0.05, 0.05, 0.05),   // コーナー→重心 [m]
+  It: 5.5e-3,   // 対角に垂直な軸の慣性（コーナーまわり）
+  failed: false, failTimer: 0,
+  spinOn: false, spinTarget: 0.9, Kyaw: 0.02,
+  gains: null,
+
+  // I_c⁻¹（体固定系・定数）: 対角方向 1/Icom, 垂直方向 1/It の固有分解から
+  IcInv(v) {
+    const nn = this.n.dot(v);
+    const par = this.n.clone().multiplyScalar(nn);
+    const perp = v.clone().sub(par);
+    return perp.multiplyScalar(1 / this.It).add(par.multiplyScalar(1 / P.Icom));
+  },
+  init() {
+    // 対角(1,1,1)を+Yへ向ける初期姿勢＋微小傾き
+    this.q.setFromUnitVectors(this.n, new THREE.Vector3(0, 1, 0));
+    const tiltAx = new THREE.Vector3(1, 0, -1).normalize();
+    this.q.multiply(new THREE.Quaternion().setFromAxisAngle(tiltAx, 0.02));
+    this.w.set(0, 0, 0); this.hw.set(0, 0, 0);
+    this.failed = false;
+    this.gains = balanceGains(this.It, P.m * this.g * P.rC);
+  },
+  enter() {
+    groundGroup.visible = true; ghost.visible = false;
+    pivotEdge.visible = false; pivotSphere.visible = true;
+    pivotSphere.position.set(0, 0.02, 0);
+    chart.config([
+      { label: '傾き', unit: '°', color: '#60d0ff', range: [-1, 20], get: () => this.tiltDeg() },
+      { label: '自転 ω·n', unit: ' rad/s', color: '#22ff88', range: [-1.5, 1.5], digits: 2, get: () => this.w.dot(this.n) },
+    ]);
+    $('chart-title').textContent = '▶ 傾き角と対角軸まわり自転';
+  },
+  tiltDeg() {
+    const upB = new THREE.Vector3(0, 1, 0).applyQuaternion(this.q.clone().conjugate());
+    return Math.acos(clamp(upB.dot(this.n), -1, 1)) * 180 / Math.PI;
+  },
+  step(h) {
+    if (this.failed) {
+      this.failTimer -= h;
+      if (this.failTimer <= 0) { this.init(); flash('リセットしました'); }
+      return;
+    }
+    const upB = new THREE.Vector3(0, 1, 0).applyQuaternion(this.q.clone().conjugate());
+    const gB = upB.clone().multiplyScalar(-this.g);
+    const tauG = this.rB.clone().cross(gB).multiplyScalar(P.m);
+
+    // 制御則
+    const { k1, k2, k3 } = this.gains;
+    const err = this.n.clone().cross(upB);
+    const wPar = this.n.clone().multiplyScalar(this.w.dot(this.n));
+    const wPerp = this.w.clone().sub(wPar);
+    const hPerp = this.hw.clone().sub(this.n.clone().multiplyScalar(this.hw.dot(this.n)));
+    const sT = this.spinOn ? this.spinTarget : 0;
+    const tc = err.multiplyScalar(k1)
+      .sub(wPerp.clone().multiplyScalar(k2))
+      .sub(hPerp.multiplyScalar(k3 / P.Iw))
+      .sub(this.n.clone().multiplyScalar(this.Kyaw * (this.w.dot(this.n) - sT)));
+
+    // ホイール（飽和込み）: ḣ_w = −τ_c
+    const hdot = new THREE.Vector3(
+      wheelTorque(this.hw.x, -tc.x, P.tauBal, h),
+      wheelTorque(this.hw.y, -tc.y, P.tauBal, h),
+      wheelTorque(this.hw.z, -tc.z, P.tauBal, h));
+
+    // ノイズ
+    tauG.x += (Math.random() - 0.5) * 2e-4;
+    tauG.z += (Math.random() - 0.5) * 2e-4;
+
+    const H = this.w.clone().multiplyScalar(0); // placeholder replaced below
+    const IcW = (() => {  // I_c ω
+      const nn = this.w.dot(this.n);
+      const par = this.n.clone().multiplyScalar(nn * P.Icom);
+      const perp = this.w.clone().sub(this.n.clone().multiplyScalar(nn)).multiplyScalar(this.It);
+      return par.add(perp);
+    })();
+    const gyro = this.w.clone().cross(IcW.add(this.hw));
+    const rhs = tauG.sub(hdot).sub(gyro);
+    const wd = this.IcInv(rhs);
+    this.w.add(wd.multiplyScalar(h));
+    this.hw.add(hdot.multiplyScalar(h));
+    quatIntegrate(this.q, this.w, h);
+
+    if (this.tiltDeg() > 30) {
+      this.failed = true; this.failTimer = 2.0;
+      flash('転倒！ コーナーバランス喪失', 'ng');
+    }
+  },
+  render(dt) {
+    cube.group.quaternion.copy(this.q);
+    // コーナー（体固定 -r 方向の頂点）が原点に固定: center = R·r_render, r_render = (0.5,0.5,0.5)
+    const c = new THREE.Vector3(0.5, 0.5, 0.5).applyQuaternion(this.q);
+    cube.group.position.copy(c);
+    spinWheels({ x: this.hw.x / P.Iw, y: this.hw.y / P.Iw, z: this.hw.z / P.Iw }, dt);
+  },
+  telemetry() {
+    return `
+      <div class="tele-row"><span>傾き角</span><b>${this.tiltDeg().toFixed(2)}°</b></div>
+      <div class="tele-row"><span>自転レート ω·n</span><b>${this.w.dot(this.n).toFixed(2)} rad/s</b></div>
+      <div class="tele-row"><span>重力</span><b>${this.g === P.gE ? '地球 1G' : '月 1/6G'}</b></div>
+      <div class="tele-row"><span>ゲイン k₁/k₂</span><b>${this.gains.k1.toFixed(2)} / ${this.gains.k2.toFixed(3)}</b></div>
+      ${wheelBarsHTML({ x: this.hw.x / P.Iw, y: this.hw.y / P.Iw, z: this.hw.z / P.Iw })}`;
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
+// モード4: 転がり（M3 / 運動量ブレーキ型）[3][4]
+//   CoM角 φ（鉛直から、開始 −45°）: I_e φ̈ = mgd·sinφ + τ_brake(ブレーキ中)
+//   ホイール: ω̇_w = −τ_b/Iw → ω_w=0 でブレーキ終了（∫τdt = I_w ω₀ = L₀ を機体へ）
+// ════════════════════════════════════════════════════════════════
+const roll = {
+  name: 'roll',
+  phi: -Math.PI / 4, phid: 0, ww: 0, settleTimer: 0,
+  phase: 'rest',   // rest | spin | ready | brake | rolling | settle
+  g: P.gE, brakeElec: true, slowmo: true,
+  // 伝達効率: build-plan §5-3 の「実用（伝達効率60%）」を運動量換算 √0.6≈0.775 で反映 [試算]
+  etaL: 1.0,
+  tauCustom: null,      // ブレーキτ実測値 [N·m]（M1実測後に入力。null=プリセット使用）
+  thresholdInfo: null,  // 「成功閾値rpm計算」の結果表示
+  baseX: 0, successCount: 0,
+  targetRpm: 4800,
+
+  brakeTau() { return this.tauCustom ?? (this.brakeElec ? P.brakeE : P.brakeB); },
+  // 現在条件（重力・効率・ブレーキτ）での峠越え最小回転数を二分探索 [試算]
+  computeThreshold() {
+    const saved = { phi: this.phi, phid: this.phid, ww: this.ww, phase: this.phase,
+      baseX: this.baseX, successCount: this.successCount, settleTimer: this.settleTimer,
+      justLanded: this.justLanded, autoArm: this.autoArm };
+    const tryRpm = rpm => {
+      this.phi = -Math.PI / 4; this.phid = 0; this.phase = 'brake';
+      this.successCount = 0; this.justLanded = false;
+      this.ww = rpm / RAD2RPM;
+      let steps = 0;
+      while (this.phase !== 'rest' && steps < 60000) { this.step(1 / 2000); steps++; }
+      return this.successCount > 0;
+    };
+    let result;
+    if (!tryRpm(8000)) result = null;
+    else {
+      let lo = 300, hi = 8000;
+      while (hi - lo > 20) { const mid = (lo + hi) / 2; if (tryRpm(mid)) hi = mid; else lo = mid; }
+      result = Math.round(hi);
+    }
+    Object.assign(this, saved);
+    return result;
+  },
+
+  init() {
+    this.phi = -Math.PI / 4; this.phid = 0; this.ww = 0;
+    this.phase = 'rest'; this.baseX = 0; this.successCount = 0;
+    this.autoArm = false; this.justLanded = false;
+  },
+  enter() {
+    groundGroup.visible = true; ghost.visible = false;
+    pivotSphere.visible = false; pivotEdge.visible = true;
+    chart.config([
+      { label: 'CoM角 φ', unit: '°', color: '#60d0ff', range: [-50, 50], get: () => this.phi * 57.3 },
+      { label: 'ホイール', unit: ' rpm', color: '#2266ff', range: [0, 6200], digits: 0, get: () => Math.abs(this.ww) * RAD2RPM },
+    ]);
+    $('chart-title').textContent = '▶ 転がり角とホイール回転数（φ=0 が峠）';
+  },
+  Lreq() {  // エッジ越えに必要な角運動量 √(2UI_e) [試算]
+    const dh = P.dE * (1 - Math.cos(Math.PI / 4));
+    return Math.sqrt(2 * P.m * this.g * dh * P.Ie);
+  },
+  step(h) {
+    const mgd = P.m * this.g * P.dE;
+    const tauB = this.brakeTau();
+
+    if (this.phase === 'spin') {
+      this.ww += P.tauW / P.Iw * h;
+      if (this.ww >= this.targetRpm / RAD2RPM) {
+        this.ww = this.targetRpm / RAD2RPM;
+        this.phase = 'ready';
+        flash(`スピンアップ完了: ${this.targetRpm} rpm（L₀=${(P.Iw*this.ww*1000).toFixed(1)} mN·m·s）`);
+        if (this.autoArm) { this.autoArm = false; this.startBrake(); }
+      }
+      return;
+    }
+    if (this.phase === 'settle') {
+      // 戻り着地後の静定待ち
+      this.phi = -Math.PI / 4; this.phid = 0;
+      this.settleTimer -= h;
+      if (this.settleTimer <= 0) this.phase = 'rest';
+      return;
+    }
+    if (this.phase === 'brake' || this.phase === 'rolling') {
+      let tau = 0;
+      if (this.phase === 'brake') {
+        if (this.ww > 0) {
+          tau = tauB * this.etaL;   // 機体が受け取る反トルク（伝達損失込み）
+          const dw = tauB / P.Iw * h;
+          this.ww = Math.max(0, this.ww - dw);
+        }
+        if (this.ww <= 0) { this.ww = 0; this.phase = 'rolling'; }
+      }
+      // 機体: エッジまわり回転（接触維持を仮定）
+      this.phid += (mgd * Math.sin(this.phi) + tau) / P.Ie * h;
+      this.phi += this.phid * h;
+
+      // 接触拘束: 開始面より戻る方向はバウンド
+      if (this.phi <= -Math.PI / 4 && this.phid < 0) {
+        this.phi = -Math.PI / 4;
+        this.phid = -this.phid * 0.25;
+        if (Math.abs(this.phid) < 0.15) {
+          this.phase = 'settle';
+          this.settleTimer = 0.8;
+          if (!this.justLanded) {
+            flash(`不足… 峠(φ=0)を越えられず戻りました（必要L≈${(this.Lreq()*1000).toFixed(1)} mN·m·s）`, 'ng');
+          }
+          this.justLanded = false;
+        }
+      }
+      // 着地: 次の面に到達 → エッジ衝突で新ピボットへ運動量伝達（非弾性）
+      // 新エッジまわり角運動量 L⁺ = I_com·ω⁻（並進項は幾何的に相殺）→ ω⁺ = (I_com/I_e)·ω⁻ = 0.25ω⁻ [試算]
+      if (this.phi >= Math.PI / 4) {
+        this.baseX += 1;
+        this.successCount++;
+        this.phi = -Math.PI / 4;
+        this.phid = (P.Icom / P.Ie) * this.phid;
+        this.justLanded = true;   // 静定時に「不足」表示を出さない
+        flash(`転がり成功！（${this.successCount}マス前進）`, 'ok');
+        // 残留回転が次の峠を越えれば連続転がり、越えなければロッキングして静定
+      }
+      return;
+    }
+  },
+  startSpin() {
+    if (this.phase !== 'rest') return;
+    this.phase = 'spin';
+    flash('スピンアップ中…');
+  },
+  startBrake() {
+    if (this.phase !== 'ready') { flash('先にスピンアップしてください', 'ng'); return; }
+    this.phase = 'brake';
+    flash(`急ブレーキ！（τ=${this.brakeTau().toFixed(2)} N·m${this.tauCustom !== null ? '・実測値' : ''}）`, 'ok');
+  },
+  render(dt) {
+    const ang = -(this.phi + Math.PI / 4);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), ang);
+    const d = Math.SQRT1_2;
+    cube.group.quaternion.copy(q);
+    cube.group.position.set(this.baseX + d * Math.sin(this.phi), d * Math.cos(this.phi), 0);
+    pivotEdge.position.set(this.baseX, 0.02, 0);
+    spinWheels({ x: 0, y: 0, z: -this.ww }, dt);
+    // カメラターゲットを緩追従
+    controls.target.x += (this.baseX * 0.7 - controls.target.x) * 0.03;
+  },
+  telemetry() {
+    const L0 = P.Iw * this.ww;
+    const phaseJa = { rest: '待機', spin: 'スピンアップ中', ready: 'ブレーキ待ち', brake: 'ブレーキ中', rolling: '転がり中', settle: '戻り' }[this.phase];
+    return `
+      <div class="tele-row"><span>フェーズ</span><b>${phaseJa}</b></div>
+      <div class="tele-row"><span>CoM角 φ（0=峠）</span><b>${(this.phi*57.3).toFixed(1)}°</b></div>
+      <div class="tele-row"><span>ホイール回転数</span><b>${(Math.abs(this.ww)*RAD2RPM).toFixed(0)} rpm</b></div>
+      <div class="tele-row"><span>保有 L = I_w·ω</span><b>${(L0*1000).toFixed(1)} mN·m·s</b></div>
+      <div class="tele-row"><span>必要 L（重力損失除く）</span><b>${(this.Lreq()/this.etaL*1000).toFixed(1)} mN·m·s</b></div>
+      <div class="tele-row"><span>ブレーキτ</span><b>${this.tauCustom !== null ? `<span style="color:#80ffb0">${this.tauCustom.toFixed(2)} N·m（実測値）</span>` : (this.brakeElec ? '1.10 N·m（電気・試算）' : '2.70 N·m（バンド）')}</b></div>
+      <div class="tele-row"><span>ブレーキ電流(推定)</span><b>${(this.tauCustom !== null || this.brakeElec) ? `<span style="color:#ffaa66">≈${(this.brakeTau()/P.Kt).toFixed(0)} A</span>（ESC上限${P.escA}A）` : '—（機械式バンド）'}</b></div>
+      ${this.thresholdInfo ? `<div class="tele-row"><span>成功閾値(計算)</span><b style="color:#60d0ff">${this.thresholdInfo}</b></div>` : ''}
+      <div class="tele-row"><span>前進マス数</span><b>${this.successCount}</b></div>
+      ${wheelBarsHTML({ x: 0, y: 0, z: -this.ww })}
+      <div style="font-size:9px;color:#4a6a8a;margin-top:4px">ブレーキ中の重力損失で必要L以上でも失敗しうる（→開発ノート §6-3 検証）</div>`;
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
+// モード管理・UIバインド
+// ════════════════════════════════════════════════════════════════
+const MODES = { free, m1, edge, corner, roll };
+
+function setMode(name) {
+  currentMode = MODES[name];
+  currentMode.init();
+  currentMode.enter();
+  cube.group.visible = name !== 'm1';
+  m1rig.group.visible = name === 'm1';
+  for (const k of Object.keys(MODES)) {
+    $(`tab-${k}`).classList.toggle('active', k === name);
+    $(`panel-${k}`).classList.toggle('visible', k === name);
+  }
+  const cp = CAM_PRESET[name];
+  camera.position.set(...cp.pos);
+  controls.target.set(...cp.tgt);
+}
+for (const k of Object.keys(MODES)) $(`tab-${k}`).onclick = () => setMode(k);
+
+// ── フリーフロート UI ──
+$('free-ctrl-toggle').onclick = e => {
+  free.ctrlOn = !free.ctrlOn;
+  e.target.textContent = `制御: ${free.ctrlOn ? 'ON' : 'OFF'}`;
+  e.target.classList.toggle('active', free.ctrlOn);
+};
+document.querySelectorAll('[data-target]').forEach(b => b.onclick = () => {
+  const t = b.dataset.target;
+  if (t === 'id') free.qt.identity();
+  else if (t === 'y90') free.qt.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+  else if (t === 'x180') free.qt.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+  else free.qt.setFromAxisAngle(new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize(), Math.random() * Math.PI);
+  flash('目標姿勢を更新（橙ワイヤーフレーム）');
+});
+$('free-impulse').onclick = () => {
+  free.impulseAxis.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize();
+  free.impulseLeft = 0.2;
+  flash('撃力外乱（5 mN·m × 0.2s）');
+};
+$('free-tumble').onclick = () => {
+  free.w.set((Math.random()-0.5)*4, (Math.random()-0.5)*4, (Math.random()-0.5)*4);
+  flash('タンブル発生！ 制御ONなら自動デタンブル');
+};
+$('free-constdist').onclick = e => {
+  free.constDist = !free.constDist;
+  e.target.textContent = `定常外乱: ${free.constDist ? 'ON' : 'OFF'}`;
+  e.target.classList.toggle('active', free.constDist);
+  if (free.constDist) flash('定常外乱 1.5 mN·m — ホイールに運動量が溜まり続けます');
+};
+$('free-dump').onclick = () => {
+  free.hw = { x: 0, y: 0, z: 0 };
+  flash('モーメンタムダンプ実行（スラスタ＝外部トルクでホイール運動量を捨てる）', 'ok');
+};
+
+// ── M1倒立振子 UI ──
+$('m1-gravity').onclick = e => {
+  m1.g = m1.g === P.gE ? P.gM : P.gE;
+  m1.computeGains();
+  e.target.textContent = `重力: ${m1.g === P.gE ? '地球 1G' : '月 1/6G'}`;
+  flash(`重力を${m1.g === P.gE ? '地球1G' : '月1/6G'}に変更（ゲイン再設計）`);
+};
+$('m1-law').onclick = e => {
+  m1.ctrlLaw = m1.ctrlLaw === 'pp' ? 'lqr' : 'pp';
+  m1.computeGains(); m1.peakTau = 0;
+  e.target.textContent = `制御則: ${m1.ctrlLaw === 'lqr' ? 'LQR' : '極配置 (s=−6)'}`;
+  e.target.classList.toggle('active', m1.ctrlLaw === 'lqr');
+  flash(m1.ctrlLaw === 'lqr' ? 'LQR — キックしてピーク電流を極配置と比較' : '極配置 s=−6 三重極');
+};
+$('m1-kick').onclick = () => {
+  m1.kickSign *= -1;
+  m1.peakTau = 0;
+  m1.thd += m1.kickSign * 0.35;
+  flash('外乱キック（±0.35 rad/s）— ピーク電流を計測中');
+};
+$('m1-reset').onclick = () => { m1.init(); flash('リセットしました'); };
+
+// ── 辺バランス UI ──
+$('edge-gravity').onclick = e => {
+  edge.g = edge.g === P.gE ? P.gM : P.gE;
+  edge.computeGains();
+  e.target.textContent = `重力: ${edge.g === P.gE ? '地球 1G' : '月 1/6G'}`;
+  flash(`重力を${edge.g === P.gE ? '地球1G' : '月1/6G'}に変更（ゲイン再設計）`);
+};
+$('edge-law').onclick = e => {
+  edge.ctrlLaw = edge.ctrlLaw === 'pp' ? 'lqr' : 'pp';
+  edge.computeGains(); edge.peakTau = 0;
+  e.target.textContent = `制御則: ${edge.ctrlLaw === 'lqr' ? 'LQR' : '極配置 (s=−6)'}`;
+  e.target.classList.toggle('active', edge.ctrlLaw === 'lqr');
+  flash(edge.ctrlLaw === 'lqr' ? 'LQR — キックしてピーク電流を極配置と比較' : '極配置 s=−6 三重極');
+};
+$('edge-kick').onclick = () => {
+  edge.kickSign *= -1;
+  edge.peakTau = 0;
+  edge.thd += edge.kickSign * 0.35;
+  flash('外乱キック（±0.35 rad/s）— ピーク電流を計測中');
+};
+$('edge-k3').onclick = e => {
+  edge.k3on = !edge.k3on;
+  e.target.textContent = `ホイール速度FB k₃: ${edge.k3on ? 'ON' : 'OFF'}`;
+  e.target.classList.toggle('active', edge.k3on);
+  flash(edge.k3on ? 'k₃ ON — ホイール回転数を状態に含めて制御（飽和を防ぐ）'
+                  : 'k₃ OFF — 角度PDのみ。バイアス外乱下ではホイールが飽和します', edge.k3on ? '' : 'ng');
+};
+$('edge-bias').onclick = e => {
+  edge.bias = edge.bias === 0 ? 2e-3 : 0;
+  e.target.textContent = `バイアス外乱: ${edge.bias !== 0 ? 'ON (2mN·m)' : 'OFF'}`;
+  e.target.classList.toggle('active', edge.bias !== 0);
+  if (edge.bias !== 0) flash('定常バイアス外乱 2mN·m（CoMオフセット模擬）— k₃の有無で挙動を比較');
+};
+$('edge-reset').onclick = () => { edge.init(); flash('リセットしました'); };
+
+// ── コーナー UI ──
+$('corner-gravity').onclick = e => {
+  corner.g = corner.g === P.gE ? P.gM : P.gE;
+  corner.gains = balanceGains(corner.It, P.m * corner.g * P.rC);
+  e.target.textContent = `重力: ${corner.g === P.gE ? '地球 1G' : '月 1/6G'}`;
+  flash(`重力を${corner.g === P.gE ? '地球1G' : '月1/6G'}に変更（ゲイン再設計）`);
+};
+$('corner-spin').onclick = e => {
+  corner.spinOn = !corner.spinOn;
+  e.target.textContent = `自転: ${corner.spinOn ? 'ON' : 'OFF'}`;
+  e.target.classList.toggle('active', corner.spinOn);
+  if (corner.spinOn) flash('対角軸まわりに自転開始（SHISEIGYO-3の自転制御と同様）');
+};
+$('corner-kick').onclick = () => {
+  const ax = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5);
+  ax.sub(corner.n.clone().multiplyScalar(ax.dot(corner.n))).normalize();
+  corner.w.add(ax.multiplyScalar(0.25));
+  flash('外乱キック（0.25 rad/s）');
+};
+$('corner-reset').onclick = () => { corner.init(); flash('リセットしました'); };
+
+// ── 転がり UI ──
+$('roll-rpm').oninput = e => {
+  roll.targetRpm = parseInt(e.target.value);
+  $('roll-rpm-label').textContent = roll.targetRpm;
+};
+$('roll-brake-type').onclick = e => {
+  roll.brakeElec = !roll.brakeElec;
+  roll.thresholdInfo = null;
+  e.target.textContent = `ブレーキ: ${roll.brakeElec ? '電気 (1.1 N·m)' : 'バンド (2.7 N·m)'}`;
+};
+$('roll-tau-custom').oninput = e => {
+  const v = parseFloat(e.target.value);
+  roll.tauCustom = (isFinite(v) && v > 0) ? v : null;
+  roll.thresholdInfo = null;
+  if (roll.tauCustom !== null) flash(`ブレーキτ実測値 ${roll.tauCustom.toFixed(2)} N·m を使用（プリセットより優先）`);
+};
+$('roll-threshold').onclick = () => {
+  const th = roll.computeThreshold();
+  const cond = `${roll.g === P.gE ? '地球1G' : '月1/6G'}・η${roll.etaL === 1 ? '100%' : '60%'}・τ${roll.brakeTau().toFixed(2)}`;
+  roll.thresholdInfo = th ? `≥ ${th.toLocaleString()} rpm（${cond}）` : `8,000rpmでも不可（${cond}）`;
+  flash(th ? `峠越えに必要な最小回転数: 約${th.toLocaleString()} rpm ［${cond}］` : `この条件では8,000rpmでも越えられません ［${cond}］`, th ? 'ok' : 'ng');
+};
+$('roll-eff').onclick = e => {
+  roll.etaL = roll.etaL === 1.0 ? Math.sqrt(0.6) : 1.0;
+  roll.thresholdInfo = null;
+  e.target.textContent = `伝達効率: ${roll.etaL === 1.0 ? '100%（理想）' : '60%（実機想定）'}`;
+  flash(roll.etaL === 1.0 ? '理想条件（損失なし）' : 'エネルギー伝達効率60%を想定（build-plan §5-3）');
+};
+$('roll-gravity').onclick = e => {
+  roll.g = roll.g === P.gE ? P.gM : P.gE;
+  roll.thresholdInfo = null;
+  e.target.textContent = `重力: ${roll.g === P.gE ? '地球 1G' : '月 1/6G'}`;
+};
+$('roll-spinup').onclick = () => roll.startSpin();
+$('roll-brake').onclick = () => roll.startBrake();
+$('roll-auto').onclick = () => {
+  if (roll.phase === 'ready') { roll.startBrake(); return; }
+  if (roll.phase !== 'rest') return;
+  roll.autoArm = true;
+  roll.startSpin();
+};
+$('roll-slowmo').onclick = e => {
+  roll.slowmo = !roll.slowmo;
+  e.target.textContent = `ブレーキ時スローモー: ${roll.slowmo ? 'ON' : 'OFF'}`;
+};
+$('roll-reset').onclick = () => { roll.init(); flash('リセットしました'); };
+
+// ── 時間 UI ──
+document.querySelectorAll('.ts-btn').forEach(b => b.onclick = () => {
+  timescale = parseFloat(b.dataset.ts);
+  document.querySelectorAll('.ts-btn').forEach(x => x.classList.toggle('active', x === b));
+});
+
+// ════════════════════════════════════════════════════════════════
+// 自動デモ（開発ノート §5 の推奨手順を字幕付きで自動再生）
+// ════════════════════════════════════════════════════════════════
+const demo = { active: false, timer: null, speed: 1 };
+
+const DEMO_STEPS = [
+  { cap: '月面探査ロボットの3軸姿勢制御シミュレータです。物理は実機ビルドプランの実測値・試算値で回しています。',
+    run: () => setMode('free'), wait: 5 },
+  { cap: '① 軌道上の姿勢制御：リアクションホイールの内部トルクだけで90°回頭。系の全角運動量は0のまま（角運動量保存）。',
+    run: () => document.querySelector('[data-target="y90"]').click(), wait: 8 },
+  { cap: '② タンブル（回転暴走）状態からも3軸ホイールで自動デタンブル。',
+    run: () => $('free-tumble').click(), wait: 8 },
+  { cap: '③ M1倒立振子：いま製作中の実機試験台（単板100mm＋PLAホイールφ80）と同じ構成・同じ制御則。',
+    run: () => setMode('m1'), wait: 4 },
+  { cap: '外乱キック → 状態フィードバックで復元。バランス時のモータ電流は約1A。',
+    run: () => $('m1-kick').click(), wait: 7 },
+  { cap: '④ 辺バランス（100mm角キューブ・0.6kg）。キックしても復元します。',
+    run: () => { setMode('edge'); setTimeout(() => { if (demo.active) $('edge-kick').click(); }, 1500 / demo.speed); }, wait: 7 },
+  { cap: '重力を月1/6Gへ。同じキックでも復元がずっと楽 —「地上で成立すれば月では余裕」。',
+    run: () => { $('edge-gravity').click(); $('edge-kick').click(); }, wait: 7 },
+  { cap: '⑤ コーナーバランス：3Dの点倒立＋対角軸まわりの自転制御（SHISEIGYO-3と同じ演目）。',
+    run: () => { $('edge-gravity').click(); setMode('corner'); $('corner-spin').click(); }, wait: 9 },
+  { cap: '⑥ 転がり移動：ホイールを4800rpmまで回し急ブレーキ→角運動量で辺を乗り越える方式。まず実機想定（伝達効率60%）の電気ブレーキで…',
+    run: () => {
+      $('corner-spin').click();
+      setMode('roll');
+      $('roll-rpm').value = '4800'; $('roll-rpm').dispatchEvent(new Event('input'));
+      if (!roll.brakeElec) $('roll-brake-type').click();
+      if (roll.etaL === 1.0) $('roll-eff').click();
+    }, wait: 4 },
+  { cap: '…電気ブレーキ（40A＝ESC限界）では角運動量が足りず、峠を越えられません。→ 実機M1でブレーキ実測する理由。',
+    run: () => $('roll-auto').click(), wait: 13 },
+  { cap: '⑦ 機械式バンドブレーキ（2.7N·m）に変えると…',
+    run: () => $('roll-brake-type').click(), wait: 3 },
+  { cap: '…同じ回転数で転がり成功。月面なら必要回転数は41%まで下がります。',
+    run: () => $('roll-auto').click(), wait: 13 },
+  { cap: 'シミュレーション（本画面）→ 実機M1〜M4 → 月面探査群ロボットへ。ご清覧ありがとうございました。',
+    run: () => {}, wait: 6 },
+];
+
+function demoRestoreDefaults() {
+  if (edge.g !== P.gE) $('edge-gravity').click();
+  if (m1.g !== P.gE) $('m1-gravity').click();
+  if (corner.spinOn) $('corner-spin').click();
+  if (!roll.brakeElec) $('roll-brake-type').click();
+  if (roll.etaL !== 1.0) $('roll-eff').click();
+  if (roll.g !== P.gE) $('roll-gravity').click();
+}
+function demoStop(finished = false) {
+  demo.active = false;
+  clearTimeout(demo.timer);
+  $('demo-caption').style.display = 'none';
+  $('btn-demo').textContent = '▶ 自動デモ（約100秒・字幕付き）';
+  $('btn-demo').classList.remove('active');
+  demoRestoreDefaults();
+  if (finished) { setMode('free'); flash('デモ終了', 'ok'); }
+}
+function demoStart() {
+  if (demo.active) { demoStop(); flash('デモを停止しました'); return; }
+  demo.active = true;
+  $('btn-demo').textContent = '■ デモ停止';
+  $('btn-demo').classList.add('active');
+  let i = 0;
+  const next = () => {
+    if (!demo.active) return;
+    if (i >= DEMO_STEPS.length) { demoStop(true); return; }
+    const s = DEMO_STEPS[i++];
+    if (s.cap) { const c = $('demo-caption'); c.textContent = s.cap; c.style.display = 'block'; }
+    try { s.run(); } catch (err) { console.error('[demo]', err); }
+    demo.timer = setTimeout(next, s.wait * 1000 / demo.speed);
+  };
+  next();
+}
+$('btn-demo').onclick = demoStart;
+// ユーザーの実操作（isTrusted）でデモ中断
+$('ui').addEventListener('click', ev => {
+  if (demo.active && ev.isTrusted && ev.target.id !== 'btn-demo') { demoStop(); flash('デモを停止しました'); }
+}, true);
+
+// ════════════════════════════════════════════════════════════════
+// セルフテスト（URLに ?selftest で自動実行・回帰確認用）
+// パラメータ更新時（例: P.m1 の実測値反映）はこれで物理の健全性を確認する
+// ════════════════════════════════════════════════════════════════
+function runSelfTest() {
+  const out = [];
+  const ok = (name, cond) => out.push({ name, pass: !!cond });
+  const H = 1 / 2000;
+  const savedTauCustom = roll.tauCustom;
+  roll.tauCustom = null;   // テストはプリセットτで実施
+
+  // ① フリーフロート: 90°回頭の収束＋角運動量保存
+  free.init(); free.qt.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+  let maxH = 0;
+  for (let i = 0; i < 10000; i++) {
+    free.step(H);
+    const Hb = new THREE.Vector3(free.w.x * P.Icom + free.hw.x, free.w.y * P.Icom + free.hw.y, free.w.z * P.Icom + free.hw.z);
+    maxH = Math.max(maxH, Hb.length());
+  }
+  ok('フリーフロート: 90°回頭が5秒で収束', free.errAngle() < 5);
+  ok('フリーフロート: 角運動量保存 |H|<1e-6', maxH < 1e-6);
+  // ② デタンブル
+  free.init(); free.w.set(2, -1.5, 1);
+  for (let i = 0; i < 12000; i++) free.step(H);
+  ok('フリーフロート: デタンブル（6秒で|ω|<0.1）', free.w.length() < 0.1);
+  free.init();
+
+  // ③ M1: 極配置/LQR キック回復
+  for (const law of ['pp', 'lqr']) {
+    m1.ctrlLaw = law; m1.computeGains(); m1.init(); m1.th = 0; m1.thd = 0.35;
+    for (let i = 0; i < 12000; i++) m1.step(H);
+    ok(`M1(${law}): キック0.35rad/s回復`, !m1.failed && Math.abs(m1.th) < 0.01);
+  }
+  ok('M1: LQR安定必要条件 k₁>mgd', m1.gainsLQR.k1 > P.m1.m * P.gE * P.m1.d);
+  m1.ctrlLaw = 'pp'; m1.computeGains(); m1.init();
+
+  // ④ 辺バランス: 極配置/LQR、k₃OFF飽和転倒、バイアス整定
+  for (const law of ['pp', 'lqr']) {
+    edge.ctrlLaw = law; edge.computeGains(); edge.init(); edge.th = 0; edge.thd = 0.35;
+    for (let i = 0; i < 12000; i++) edge.step(H);
+    ok(`辺バランス(${law}): キック回復`, !edge.failed && Math.abs(edge.th) < 0.01);
+  }
+  edge.ctrlLaw = 'pp'; edge.computeGains();
+  edge.init(); edge.k3on = false; edge.bias = 2e-3;
+  let failed = false;
+  for (let i = 0; i < 70000 && !failed; i++) { edge.step(H); failed = edge.failed; }
+  ok('辺バランス: k₃OFF＋バイアスで飽和転倒', failed);
+  edge.init(); edge.k3on = true; edge.bias = 2e-3;
+  for (let i = 0; i < 40000; i++) edge.step(H);
+  const eqRpm = Math.abs(edge.ww) * RAD2RPM;
+  ok('辺バランス: k₃ON＋バイアスで整定（200〜280rpm）', !edge.failed && eqRpm > 200 && eqRpm < 280);
+  edge.k3on = true; edge.bias = 0; edge.init();
+
+  // ⑤ コーナー: 整定＋キック回復
+  corner.init();
+  for (let i = 0; i < 10000; i++) corner.step(H);
+  ok('コーナー: 初期傾きが整定（<0.1°）', !corner.failed && corner.tiltDeg() < 0.1);
+  corner.w.x += 0.2; corner.w.z -= 0.15;
+  for (let i = 0; i < 12000; i++) corner.step(H);
+  ok('コーナー: キック回復', !corner.failed && corner.tiltDeg() < 0.1);
+  corner.init();
+
+  // ⑥ 転がり: 成否の境界
+  function tryRoll(rpm, elec, g, eta) {
+    roll.init(); roll.g = g; roll.brakeElec = elec; roll.etaL = eta;
+    roll.ww = rpm / RAD2RPM; roll.phase = 'ready'; roll.startBrake();
+    let steps = 0;
+    while (roll.phase !== 'rest' && steps < 60000) { roll.step(H); steps++; }
+    return roll.successCount > 0;
+  }
+  ok('転がり: 電気4800rpm・1G・理想 → 成功', tryRoll(4800, true, P.gE, 1));
+  ok('転がり: 電気3000rpm・1G・理想 → 失敗', !tryRoll(3000, true, P.gE, 1));
+  ok('転がり: 電気4800rpm・1G・効率60% → 失敗（§6-3）', !tryRoll(4800, true, P.gE, Math.sqrt(0.6)));
+  ok('転がり: バンド5500rpm・1G・効率60% → 成功', tryRoll(5500, false, P.gE, Math.sqrt(0.6)));
+  ok('転がり: 電気2500rpm・月・効率60% → 成功', tryRoll(2500, true, P.gM, Math.sqrt(0.6)));
+  // ⑦ 閾値計算の整合（電気・1G・理想 ≈ 4,346rpm）
+  roll.init(); roll.g = P.gE; roll.etaL = 1.0; roll.brakeElec = true;
+  const th = roll.computeThreshold();
+  ok('転がり: 閾値計算が実測値と整合（4,250〜4,450rpm）', th !== null && th > 4250 && th < 4450);
+  roll.init(); roll.g = P.gE; roll.etaL = 1.0; roll.brakeElec = true;
+  roll.tauCustom = savedTauCustom;
+
+  setMode('free');
+
+  // 結果表示
+  const passAll = out.every(o => o.pass);
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:30;' +
+    'background:rgba(5,10,25,0.95);border:1px solid ' + (passAll ? '#2aaa6a' : '#aa4a2a') + ';' +
+    'border-radius:8px;padding:14px 22px;font-size:12px;line-height:1.9;max-height:75vh;overflow:auto;cursor:pointer';
+  div.innerHTML = `<b style="color:${passAll ? '#80ffb0' : '#ff8060'};font-size:13px">SELF TEST: ${passAll ? 'ALL PASS' : 'FAIL'}` +
+    ` (${out.filter(o => o.pass).length}/${out.length})</b><br>` +
+    out.map(o => `<span style="color:${o.pass ? '#70c090' : '#ff8060'}">${o.pass ? '✓' : '✗'} ${o.name}</span>`).join('<br>') +
+    '<br><span style="color:#5080a0;font-size:10px">クリックで閉じる</span>';
+  div.onclick = () => div.remove();
+  document.body.appendChild(div);
+  console.table(out.map(o => ({ test: o.name, pass: o.pass })));
+  return out;
+}
+if (location.search.includes('selftest')) setTimeout(runSelfTest, 400);
+
+// ════════════════════════════════════════════════════════════════
+// メインループ
+// ════════════════════════════════════════════════════════════════
+let acc = 0, lastT = performance.now();
+let teleTimer = 0, chartTimer = 0;
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dtReal = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
+
+  // 転がりモード: ブレーキ〜峠越えは自動スローモー
+  let ts = timescale;
+  if (currentMode === roll && roll.slowmo &&
+      (roll.phase === 'brake' || (roll.phase === 'rolling' && Math.abs(roll.phi) < Math.PI / 4 - 0.03))) {
+    ts = Math.min(ts, 0.12);
+  }
+
+  acc += dtReal * ts;
+  let steps = 0;
+  while (acc >= PHYS_DT && steps < 6000) { currentMode.step(PHYS_DT); acc -= PHYS_DT; steps++; }
+
+  currentMode.render(dtReal * ts);
+
+  teleTimer += dtReal;
+  if (teleTimer > 0.1) { $('telemetry-body').innerHTML = currentMode.telemetry(); teleTimer = 0; }
+  chartTimer += dtReal;
+  if (chartTimer > 0.033) { chart.sample(); chart.draw(); chartTimer = 0; }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+setMode('free');
+requestAnimationFrame(animate);
+
+// デバッグ・検証用フック
+window.__att = { P, MODES, setMode, get mode() { return currentMode; }, setTimescale: v => { timescale = v; }, demo, runSelfTest };
+</script>
+</body>
+</html>
