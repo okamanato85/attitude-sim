@@ -45,11 +45,17 @@
     }
     #cave-map-panel h2 {
       font-size: 10px; color: #4a8abf; font-weight: 600; letter-spacing: 0.06em;
-      margin-bottom: 5px; text-align: center;
+      margin-bottom: 5px; text-align: center; cursor: pointer; user-select: none;
     }
+    #cave-map-panel h2:hover { color: #6aa8df; }
+    #cave-map-panel.collapsed { padding-bottom: 6px; }
+    #cave-map-panel.collapsed h2 { margin-bottom: 0; }
+    #cave-map { display: block; border-radius: 4px; }
+    #cave-map-panel.collapsed #cave-map,
+    #cave-map-panel.collapsed #cave-map-legend { display: none; }
     #cave-map-legend {
-      display: flex; gap: 14px; justify-content: center; margin-top: 4px;
-      font-size: 9px; color: #5070a0;
+      display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center;
+      margin-top: 4px; font-size: 9px; color: #5070a0; max-width: 520px;
     }
     #cave-map-legend span { display: flex; align-items: center; gap: 4px; }
     .legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -73,9 +79,9 @@
     <input type="range" id="squad-count" min="1" max="6" value="1" step="1">
   </div>
   <div class="ctrl">
-    <label>1群の機数: <span id="squad-size-label">1</span> ／ 合計 <span id="robot-count-label">1</span>機</label>
-    <input type="range" id="squad-size" min="1" max="8" value="1" step="1">
-    <input type="range" id="robot-count" min="1" max="48" value="1" step="1" style="display:none">
+    <label>1群の機数: <span id="squad-size-label">8</span> ／ 合計 <span id="robot-count-label">8</span>機</label>
+    <input type="range" id="squad-size" min="1" max="8" value="8" step="1">
+    <input type="range" id="robot-count" min="1" max="48" value="8" step="1" style="display:none">
   </div>
   <button class="btn" id="btn-move">移動モード（ロール探索）</button>
   <button class="btn" id="btn-structure">構造物形成モード</button>
@@ -103,12 +109,12 @@
   <span class="fw-dot" style="background:#22ff44"></span> Y軸フライホイール（旋回）<br>
   <span class="fw-dot" style="background:#2244ff"></span> Z軸フライホイール（左右ロール）<br>
   <span style="display:inline-block;width:14px;height:6px;background:#33dd55;border:1px solid #0a0e18;vertical-align:middle;margin-right:4px"></span>バッテリー残量（機体上部・<span style="color:#33dd55">緑</span>→<span style="color:#ffcc22">黄</span>→<span style="color:#ff3322">赤</span>で帰還・充電）<br>
-  <span style="color:#556677; font-size:10px">左ドラッグ: 回転 ／ 右ドラッグ: 平行移動 ／ スクロール: ズーム<br>キー: R 全体 ／ E 入口 ／ T 真上 ／ D 奥部</span>
+  <span style="color:#556677; font-size:10px">左ドラッグ: 回転 ／ 右ドラッグ: 平行移動 ／ スクロール: ズーム<br>キー: R 全体 ／ E 入口 ／ T 真上 ／ D 奥部 ／ M マップ収納</span>
 </div>
 
 <div id="cave-map-panel">
-  <h2>▶ 洞窟探査マップ（トップビュー） — X: 探索方向 ／ Z: チューブ幅方向</h2>
-  <canvas id="cave-map" width="700" height="270" style="display:block;border-radius:4px;"></canvas>
+  <h2 onclick="window.toggleCaveMap && window.toggleCaveMap()"><span id="cave-map-caret">▼</span> 洞窟探査マップ（トップビュー） — X: 探索方向 ／ Z: チューブ幅方向</h2>
+  <canvas id="cave-map" width="520" height="180"></canvas>
   <div id="cave-map-legend">
     <span><span class="legend-dot" style="background:rgba(30,90,170,0.85)"></span>ムーバー探索済</span>
     <span><span class="legend-dot" style="background:rgba(0,200,130,0.85)"></span>センサー探索済</span>
@@ -197,6 +203,7 @@ scene.add(envGroup);
 const lavaHeights = new Map();   // "x,z"（整数座標）→ 高さ [unit]
 const CLIMB_MAX = 0.5;
 const SKY_X = 6;   // 天窓（スカイライト）位置 — スポーン・帰還の原点
+let commBeaconRings = [];   // 縦穴直下の通信設備の信号リング（buildLateralEnvが代入・renderLoopで脈動。呼出前に宣言＝TDZ回避）
 // 探査グリッド定数（2026-07-20大型化: 100×60ユニット＝実寸1,000m×600m）
 // ※missionParamsより先に評価されるbuildLateralEnvからも参照するためここで定義
 const GRID_NX = 50, GRID_NZ = 30, GRID_HALF_NZ = 15, GRID_CELL = 2;
@@ -299,6 +306,39 @@ function buildLateralEnv() {
   }
   addSkylight(SKY_X);
   addSkylight(62);
+
+  // ── 通信設備（縦穴直下・通信の根を視覚化）────────────────────
+  // ロボットではなく固定設備。脈動する信号リングで「送受信中」を表す。
+  commBeaconRings = [];
+  {
+    const cx = SKY_X, cz = 0, COMM = 0x22ddff;
+    // 基台
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 0.35, 20),
+      new THREE.MeshStandardMaterial({ color: 0x2a3550, metalness: 0.7, roughness: 0.4 }));
+    base.position.set(cx, 0.17, cz); envGroup.add(base);
+    // マスト
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.0, 12),
+      new THREE.MeshStandardMaterial({ color: 0x8090a0, metalness: 0.8, roughness: 0.3 }));
+    mast.position.set(cx, 1.7, cz); envGroup.add(mast);
+    // 頂部のディッシュ（皿）＋発光ビーコン
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0xbfe8ff, metalness: 0.6, roughness: 0.25, side: THREE.DoubleSide }));
+    dish.rotation.x = Math.PI * 0.15; dish.position.set(cx, 3.25, cz); envGroup.add(dish);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 12),
+      new THREE.MeshStandardMaterial({ color: COMM, emissive: new THREE.Color(COMM), emissiveIntensity: 0.5 }));
+    beacon.position.set(cx, 3.4, cz); envGroup.add(beacon);
+    const beaconLight = new THREE.PointLight(COMM, 0.8, 5); beaconLight.position.set(cx, 3.4, cz); envGroup.add(beaconLight);
+    // 信号リング（控えめ・小さく1本だけ地表付近でゆっくり脈動）
+    {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.04, 8, 40),
+        new THREE.MeshBasicMaterial({ color: COMM, transparent: true, opacity: 0.22 }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(cx, 0.3, cz);
+      ring.userData.phase = 0;
+      envGroup.add(ring);
+      commBeaconRings.push(ring);
+    }
+  }
 
   // ── 溶岩地形（高さ付き）────────────────────────────────
   const LOW = 0.4, TALL = 2.2;
@@ -828,6 +868,12 @@ const MOVER_PATTERN  = ['forward','forward','right','forward','forward','left','
 // 群れ（squad）: 各群は色系統・スポーン集団・担当zセクターを持つ。
 // 群数はUIスライダー（AIミッション経由の直接スポーンでは現在値を流用）
 let desiredSquads = 1;
+// クライアント側リレーミッション状態（spawnRobots初回呼び出しより前に宣言＝TDZ回避）
+let clientMission = false;
+let _explorerLeashX = Infinity;   // 探索機が目標にできる最大X（通信到達範囲）
+let _clientRelayK = 0;            // 中継機の総数
+let _deployedRelays = 0;          // 展開済み中継数（前線が伸びるたび1台ずつ増える）
+let _staticCardMode = false;      // 名刺QR＝静的配信（バックエンド無し）で true
 
 // 天窓直下を原点に同心リング状のスポーンセルを列挙（縦孔から降ろされた想定）。
 // 溶岩セル・場外はスキップ。
@@ -853,6 +899,7 @@ function spawnRobots(count) {
   robots.forEach(r => scene.remove(r));
   robots.length = 0;
   while (batteryGroup.children.length) batteryGroup.remove(batteryGroup.children[0]);
+  clientMission = false; _explorerLeashX = Infinity;   // 再編成でリレーミッション解除
   const nSquads  = Math.max(1, Math.min(desiredSquads, count));
   const perSquad = Math.ceil(count / nSquads);
   const zSpan    = GRID_HALF_NZ * GRID_CELL * 2 - 2;   // 58
@@ -879,7 +926,7 @@ function spawnRobots(count) {
   robots.forEach(r => { r.userData.glow.visible = glowOn; });
 }
 
-spawnRobots(1);
+spawnRobots(8);   // 既定: 群1×8機
 
 // ── Mode State ────────────────────────────────────────────────
 let movingMode = false;
@@ -912,6 +959,16 @@ window.__sim.setPos = (x, z) => {
 window.__sim.tryRoll = dir => robots[0] ? startRoll(robots[0], dir) : false;
 window.__sim.heightAt = heightAt;
 window.__sim.commLineCount = () => commLinesGroup.children.length;
+window.__sim.missionInfo = () => ({
+  clientMission, relayK: _clientRelayK, deployed: _deployedRelays, leashX: +_explorerLeashX.toFixed(1),
+  roles: robots.reduce((a, r) => { const t = r.userData.agentType || 'mover'; a[t] = (a[t]||0)+1; return a; }, {}),
+  anchor: robots.find(r => r.userData.isAnchor) ? 'stationed' : 'moving',
+  relayX: robots.filter(r => r.userData.agentType === 'mobile_relay').map(r => +r.position.x.toFixed(0)),
+  relayPos: robots.filter(r => r.userData.agentType === 'mobile_relay')
+    .map(r => ({ x: +r.position.x.toFixed(0), z: +r.position.z.toFixed(1), tz: r.userData.dynamicTarget ? +r.userData.dynamicTarget.z.toFixed(1) : null })),
+  explorerZ: robots.filter(r => (r.userData.agentType||'mover')==='mover' && !r.userData.returned).map(r => +r.position.z.toFixed(0)),
+  isolated: robots.filter(r => r.userData.isolated).length,
+});
 window.__sim.setAllBattery = v => { robots.forEach(r => r.userData.battery = v); };
 window.__sim.batteryStates = () => robots.map(r => ({
   b: +(r.userData.battery ?? 1).toFixed(2), returning: !!r.userData.returning, returned: !!r.userData.returned,
@@ -1144,6 +1201,25 @@ function updateSwarmComms() {
     commLinesGroup.add(new THREE.Line(geo, mat));
   }
 
+  // 通信設備からの緑線: 設備（縦穴直下 SKY_X）の通信圏内かつ接続中の機体へ。
+  // 機体同士の線と同じ緑で、設備が通信網の一部であることを示す。近い順に最大3本。
+  if (envMode === 'lateral') {
+    const instPos = new THREE.Vector3(SKY_X, 1.0, 0);
+    const near = [];
+    for (let i = 0; i < n; i++) {
+      const r = robots[i];
+      if (r.userData.inactive || r.userData.returned || !connected.has(i)) continue;
+      const d = Math.hypot(r.position.x - SKY_X, r.position.z);
+      if (d <= commRange) near.push({ i, d });
+    }
+    near.sort((a, b) => a.d - b.d);
+    for (const { i } of near.slice(0, 3)) {
+      const pts = [instPos.clone(), robots[i].position.clone().setY(robots[i].position.y + 0.55)];
+      commLinesGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0x00ff88, opacity: 0.9, transparent: true })));
+    }
+  }
+
   // 孤立機マーカー: 通信が切れている機体の頭上に赤リングを表示
   // （リンク線は「繋がっている時」しか描けないため、切断状態はこちらで可視化）
   const ringGeo = new THREE.TorusGeometry(0.55, 0.05, 6, 24);
@@ -1156,6 +1232,97 @@ function updateSwarmComms() {
     ring.position.copy(robots[i].position).y += 1.1;
     commLinesGroup.add(ring);
   }
+}
+
+// ── クライアント側リレーミッション（名刺QR版＝バックエンド無しでも成立）──
+// 縦穴直下の「通信設備」を通信の根とし、①中継機は縦穴〜前線の間に動的に
+// 分散して通信を保ったまま前線に追従（固定停留しない）、②前線が伸びるほど
+// 中継を順次追加、③探索機は通信到達範囲（リーシュ）内でフロンティア探索。
+// 中継は前線の進みに合わせて間隔を広げながら常時再配置される。
+function setupClientRelayMission() {
+  const n = robots.length;
+  clientMission = n >= 3;          // 3機未満はリレー不要（全機探索）
+  _explorerLeashX = Infinity;
+  _deployedRelays = 0;
+  if (!clientMission) return;
+  // 通信の根は縦穴直下の「通信設備」（updateSwarmCommsがSKY_X基点で判定）。
+  // 全機を中継 or 探索に割当（探索機は最低3機確保）。
+  _clientRelayK = Math.max(1, Math.min(Math.floor(n / 2), 5, n - 3));
+  anchoredRobotIds = [];
+  robots.forEach((r, i) => {
+    const ud = r.userData;
+    ud.returning = false; ud.returned = false; ud.frontierTarget = null;
+    ud.isAnchor = false; ud.anchorTarget = null; ud.dynamicTarget = null;
+    if (i < _clientRelayK) {       // 中継機（待機→前線が伸びると順次展開）
+      ud.agentType = 'mobile_relay';
+      ud.relayIndex = i;           // 0.._clientRelayK-1
+    } else {                       // 探索機
+      ud.agentType = 'mover';
+    }
+  });
+}
+
+function updateClientRelayMission() {
+  if (!clientMission) return;
+  const cr  = missionParams.commRange;
+  const hop = cr * 0.85;           // 中継間隔（通信圏に重なりを持たせる）
+  // 前線の深さ＝探索機の最深X
+  let frontierX = SKY_X;
+  for (const r of robots) {
+    if ((r.userData.agentType || 'mover') === 'mover' && !r.userData.returned)
+      frontierX = Math.max(frontierX, r.position.x);
+  }
+  const relays = robots.filter(r => r.userData.agentType === 'mobile_relay')
+    .sort((a, b) => a.userData.relayIndex - b.userData.relayIndex);
+
+  // 順次展開: 前線が現在の展開済みチェーンの端に近づいたら中継を1台追加
+  if (_deployedRelays < _clientRelayK &&
+      frontierX > SKY_X + _deployedRelays * hop + cr * 0.5) {
+    _deployedRelays++;
+  }
+
+  // 中継の目標位置: 縦穴〜前線の間に動的に等間隔分散（X方向に追従）。
+  // さらに幅方向(Z)も、その中継が担当する「奥の探索機のz重心」に合わせて動かす
+  // （案A: 群れが片側に寄れば中継も幅方向に追従）。ただし鎖の連続性のため、
+  // 直前の中継(根は通信設備 z=0)から通信圏内に収まるzだけ許容する。
+  const active   = Math.max(1, _deployedRelays);
+  const spacing  = Math.min((frontierX - SKY_X) / (active + 1), hop);
+  const halfW    = missionParams.halfNz * missionParams.cellSize - 2;  // ±28
+  const zSlack   = Math.sqrt(Math.max(1, cr * cr - spacing * spacing)) * 0.7;  // 隣接中継間で許すz差
+  let prevZ = 0;                 // 通信設備(z=0)が鎖の根
+  let reserveRank = 0;
+  relays.forEach((r, idx) => {
+    if (idx < _deployedRelays) {
+      const tx = Math.min(SKY_X + (idx + 1) * spacing, 98);
+      // この中継が中継すべき「奥の探索機」のz重心
+      let zsum = 0, cnt = 0;
+      for (const m of robots) {
+        if ((m.userData.agentType || 'mover') === 'mover' && !m.userData.returned &&
+            m.position.x >= tx - spacing * 0.5) { zsum += m.position.z; cnt++; }
+      }
+      const zc = cnt > 0 ? zsum / cnt : prevZ;
+      // 鎖の連続性: 前の中継から±zSlack かつ坑道内(±halfW)
+      const tz = Math.max(-halfW, Math.min(halfW,
+        Math.max(prevZ - zSlack, Math.min(prevZ + zSlack, zc))));
+      r.userData.dynamicTarget = { x: tx, z: tz };
+      prevZ = tz;
+    } else {
+      // 未展開: 通信設備の近くで待機（重複回避のためz方向へ交互にずらす）
+      const k = reserveRank++;
+      const zoff = (k % 2 ? 1 : -1) * (Math.floor(k / 2) + 1) * 2.5;
+      r.userData.dynamicTarget = { x: SKY_X + 2, z: Math.max(-14, Math.min(14, zoff)) };
+    }
+  });
+
+  // リーシュ＝中継の「実位置」で繋がっている鎖の到達端 + commRange
+  // （目標ではなく実位置で判定→探索機が移動中の中継を追い越して圏外へ出ない）
+  let reach = SKY_X + cr;
+  for (let idx = 0; idx < _deployedRelays; idx++) {
+    const r = relays[idx];
+    if (r && r.position.x <= reach + 2) reach = Math.max(reach, r.position.x + cr);
+    else break;                    // ここで鎖が途切れている＝これ以上伸ばさない
+  }
+  _explorerLeashX = reach;
 }
 
 // ── フロンティアターゲット計算 ──────────────────────────────────
@@ -1186,6 +1353,8 @@ function computeFrontierTarget(robot, aType, robotIdx) {
 
   let best = null, bestScore = -Infinity;
   for (let x = 0; x < nx; x++) {
+    // 通信リーシュ: クライアント側リレーミッション中は通信到達範囲より奥を目標にしない
+    if ((x + 0.5) * cellSize > _explorerLeashX) continue;
     for (let z = 0; z < nz; z++) {
       if (sharedMap.has(`${x},${z}`)) continue;
       // 溶岩壁で完全に埋まったセルは到達不能なので目標にしない（隣接スキャンで探索される）
@@ -1238,7 +1407,7 @@ function physicsUpdate() {
   lastTime = now;
 
   _swarmPhysicsTick++;
-  if (movingMode && _swarmPhysicsTick % 30 === 0) updateSwarmComms();
+  if (movingMode && _swarmPhysicsTick % 30 === 0) { updateSwarmComms(); updateClientRelayMission(); }
 
   // ── ローカルマップを毎ティック更新（フロンティア計算の即時反映）──
   if (movingMode) {
@@ -1391,9 +1560,9 @@ function physicsUpdate() {
     } else if (movingMode) {
       const aType = ud.agentType || 'mover';
 
-      // ── バッテリー消費（手動モードのみ。AIミッション中はエージェントが管理）──
+      // ── バッテリー消費（手動モードのみ。AIミッション中/リレーミッション中は無効）──
       // 探索機は探索中に消耗し、天窓の回収地点に戻ると充電されて再出動する。
-      if (performance.now() - _lastAgentBatteryTime > 3000) {
+      if (!clientMission && performance.now() - _lastAgentBatteryTime > 3000) {
         if (ud.battery === undefined) ud.battery = 1.0;
         if (ud.returned) {
           // 回収地点で充電 → 満充電で再出動
@@ -1457,17 +1626,28 @@ function physicsUpdate() {
         if (ud.returned) {
           // 帰還完了: 待機
         } else if (ud.returning) {
-          // 帰還中: 天窓直下（回収地点）に向かう（他機衝突は無視・地形は遵守）
-          if (!ud.rollState) rollTowardTarget(robot, { x: SKY_X, z: 0 }, true);
+          // 帰還中: 天窓直下の「回収ドック」へ。機体ごとに別々のドックセルに割当て、
+          // 全機が(SKY_X,0)の1点に重なる「ニコイチ」を防ぐ（衝突判定ありで到達）
+          const dockZ = Math.max(-12, Math.min(12, ((idx % 8) - 3.5) * 2));
+          if (!ud.rollState) rollTowardTarget(robot, { x: SKY_X + 2, z: dockZ });
           if (ud.rollState) updateRoll(robot, dt, rollSpeed * 1.2);
           if (!ud.rollState &&
-              Math.abs(robot.position.x - SKY_X) <= 1.5 && Math.abs(robot.position.z) <= 1.5) {
+              Math.abs(robot.position.x - (SKY_X + 2)) <= 1.5 && Math.abs(robot.position.z - dockZ) <= 1.5) {
             ud.returned = true;
           }
         } else if ((ud.battery ?? 1.0) <= missionParams.returnThreshold) {
           // バッテリー帰還閾値以下 → 帰還開始
           ud.returning = true;
           ud.frontierTarget = null;
+        } else if (ud.isolated) {
+          // 通信不可: 通信圏内へ一歩戻ってから探索再開（縦穴方向へ後退）
+          // 衝突判定あり（bypassしない）→ 孤立機同士が重なる「ニコイチ」を防ぐ
+          ud.frontierTarget = null;
+          if (!ud.rollState) {
+            const backX = Math.max(SKY_X, Math.round(robot.position.x) - 2);
+            rollTowardTarget(robot, { x: backX, z: robot.position.z });
+          }
+          if (ud.rollState) updateRoll(robot, dt, rollSpeed * 1.2);
         } else {
           // 探索中: フロンティアターゲットへ
           if (!ud.frontierTarget || _swarmPhysicsTick % 45 === idx % 45) {
@@ -1517,11 +1697,24 @@ function updateBatteryBars() {
   }
 }
 
+// 通信設備の信号リング脈動（控えめ・小さくゆっくり）
+function updateCommBeacon(now) {
+  if (!commBeaconRings.length || envMode !== 'lateral') return;
+  const rMax = 4;                              // 小さく（設備の存在を示す程度）
+  for (const ring of commBeaconRings) {
+    const t = ((now / 4200) + ring.userData.phase) % 1;   // ゆっくり1周
+    const r = 1 + t * rMax;
+    ring.scale.set(r, r, 1);
+    ring.material.opacity = 0.22 * (1 - t);    // 薄く
+  }
+}
+
 function renderLoop() {
   requestAnimationFrame(renderLoop);
   controls.update();
   updateDockRings(performance.now());
   updateBatteryBars();
+  updateCommBeacon(performance.now());
   renderer.render(scene, camera);
 }
 
@@ -1567,6 +1760,8 @@ document.getElementById('btn-move').addEventListener('click', function () {
       r.userData.patternIdx = 0;
     }
   });
+  // 名刺モード（バックエンド無し）は移動モードでもリレー探査計画を自動適用
+  if (movingMode && _staticCardMode && robots.length >= 3) setupClientRelayMission();
 });
 
 document.getElementById('btn-structure').addEventListener('click', function () {
@@ -1631,6 +1826,14 @@ window.setView = function(name) {
   controls.update();
 };
 
+// 洞窟探査マップの収納トグル（見出しクリック / M キー）
+window.toggleCaveMap = function() {
+  const panel = document.getElementById('cave-map-panel');
+  const collapsed = panel.classList.toggle('collapsed');
+  const caret = document.getElementById('cave-map-caret');
+  if (caret) caret.textContent = collapsed ? '▶' : '▼';
+};
+
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   switch (e.key.toLowerCase()) {
@@ -1638,6 +1841,7 @@ window.addEventListener('keydown', e => {
     case 'e': setView('entrance'); break;
     case 't': setView('top');      break;
     case 'd': setView('deep');     break;
+    case 'm': toggleCaveMap();     break;
   }
 });
 
@@ -1647,6 +1851,7 @@ window.addEventListener('keydown', e => {
   const SEND_INTERVAL_MS = 1000;
   let ws = null;
   let hudEl = null;
+  let _backendAvailable = null;   // null=未判定 / true=launcher.py有り（ローカル） / false=静的配信（名刺QR）
 
   function createHUD() {
     hudEl = document.createElement('div');
@@ -1671,9 +1876,32 @@ window.addEventListener('keydown', e => {
     document.body.appendChild(hudEl);
   }
 
+  // バックエンド（launcher.py）が無い静的配信（GitHub Pages＝名刺QRの飛び先）では
+  // 「起動」でブラウザ内の自律探索にフォールバックする。既定1機のときは見栄え優先で群れ編成に。
+  function startClientAutonomous() {
+    const rc = document.getElementById('robot-count');
+    if ((parseInt(rc.value) || 1) <= 2) {
+      const sc = document.getElementById('squad-count'), ss = document.getElementById('squad-size');
+      if (sc && ss) {
+        sc.value = 3; sc.dispatchEvent(new Event('input'));
+        ss.value = 6; ss.dispatchEvent(new Event('input'));
+      }
+    }
+    if (!movingMode) document.getElementById('btn-move').click();
+    setupClientRelayMission();   // 縦穴アンカー＋中継リレーの探査計画を割当
+    setHUDStatus('<span style="color:#40e080">自律探索モード（ブラウザ内AI）</span><br>' +
+      '<span style="color:#506070;font-size:10px">縦穴アンカー＋中継リレーで探査範囲を拡大</span>');
+  }
+
   window.hudStartAgent = async function() {
     const btn = document.getElementById('hud-btn-start');
     if (btn) { btn.textContent = '起動中...'; btn.disabled = true; }
+    // バックエンド不在が判明済みなら即クライアント自律探索
+    if (_backendAvailable === false) {
+      startClientAutonomous();
+      if (btn) { btn.textContent = '▶ 起動'; btn.disabled = false; }
+      return;
+    }
     try {
       // UIの編成（群れの数×1群の機数＝robot-count合計）をミッションに引き渡す
       const total = parseInt(document.getElementById('robot-count').value) || 8;
@@ -1685,7 +1913,9 @@ window.addEventListener('keydown', e => {
       const json = await res.json();
       setHUDStatus(`<span style="color:${json.ok ? '#40e080' : '#e0a040'}">${json.message}</span>`);
     } catch (e) {
-      setHUDStatus('<span style="color:#e06040">起動失敗（launcher.py が必要です）</span>');
+      // /api/start が無い（静的配信）→ クライアント側自律探索にフォールバック
+      _backendAvailable = false;
+      startClientAutonomous();
     } finally {
       if (btn) { btn.textContent = '▶ 起動'; btn.disabled = false; }
     }
@@ -1694,12 +1924,20 @@ window.addEventListener('keydown', e => {
   window.hudStopAgent = async function() {
     const btn = document.getElementById('hud-btn-stop');
     if (btn) { btn.textContent = '停止中...'; btn.disabled = true; }
+    // バックエンド不在ならクライアント側の自律探索を停止
+    if (_backendAvailable === false) {
+      if (movingMode) document.getElementById('btn-move').click();
+      setHUDStatus('自律探索を停止しました<br><span style="color:#506070;font-size:10px">↑ 起動で再開</span>');
+      if (btn) { btn.textContent = '■ 停止'; btn.disabled = false; }
+      return;
+    }
     try {
       const res = await fetch('/api/stop', { method: 'POST' });
       const json = await res.json();
       setHUDStatus(`<span style="color:#e0a040">${json.message}</span>`);
     } catch (e) {
-      setHUDStatus('<span style="color:#e06040">停止失敗</span>');
+      if (movingMode) document.getElementById('btn-move').click();
+      setHUDStatus('自律探索を停止しました');
     } finally {
       if (btn) { btn.textContent = '■ 停止'; btn.disabled = false; }
     }
@@ -2132,8 +2370,32 @@ window.addEventListener('keydown', e => {
     ws.onerror = () => { ws && ws.close(); };
   }
 
+  // バックエンド（launcher.py の /api/status）の有無を判定
+  async function probeBackend() {
+    try {
+      const res = await fetch('/api/status', { method: 'GET' });
+      const json = await res.json();
+      return typeof json.running === 'boolean';
+    } catch (e) { return false; }
+  }
+
+  // 名刺（静的配信）モード: 機密の /status.html リンクを除去し、AIパネル文言を自律探索デモに
+  function applyCardMode() {
+    document.querySelectorAll('a[href="/status.html"], a[href$="/status.html"]').forEach(a => a.remove());
+    setHUDStatus('自律探索デモ（ブラウザ完結）<br>' +
+      '<span style="color:#506070;font-size:10px">↑ 起動でロボットが自律探索を開始</span>');
+  }
+
   createHUD();
-  connect();
+  probeBackend().then(ok => {
+    _backendAvailable = ok;
+    _staticCardMode = !ok;
+    if (ok) {
+      connect();          // ローカル: Python マルチAI と WebSocket 連携
+    } else {
+      applyCardMode();    // 名刺QR: WebSocketは繋がず、機密リンク除去＋自律探索フォールバック
+    }
+  });
 })();
 </script>
 </body>
